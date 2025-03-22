@@ -20,9 +20,16 @@ A Model Context Protocol (MCP) server for interacting with Jira's REST API using
 - A Jira instance (Cloud, Server, or Data Center)
 - [uv](https://github.com/astral-sh/uv) (optional but recommended for dependency management)
 
-### Using uv (recommended)
+### Activate a virtual environment (recommended)
 
 ```bash
+# Install a Virtual Environment (VENV) in the mcp server directory
+python -m venv .
+# Activate the virtual environment
+source bin/activate
+```
+### Using uv (recommended)
+```
 # Install uv if you don't have it
 pip install uv
 
@@ -79,16 +86,35 @@ docker run --env-file .env -p 8080:8080 mcp-jira
 To use this server with Claude Desktop:
 
 1. Install the server using one of the methods above
-2. Start the server in a terminal: `python -m mcp_server_jira`
-3. In Claude Desktop:
-   - Go to Settings → MCP Servers
-   - Click "Add Server"
-   - Select "Local Command" as the server type
-   - Enter `python -m mcp_server_jira` as the command
-   - Name your server (e.g., "Jira Server")
-   - Click "Save"
+2. In Claude Desktop:
+   - Go to Settings -> Developer
+   - Click Edit Config
+   - Open the json configuraiton in your editor of choice
+   - Add the following JSON:
+(`NOTE`: The environment variables used are for token Auth and will not work with other authentication methods)
+```json
+{
+  "mcpServers": {
+    "jira": {
+      "command": "<PATH TO UV> i.e. /Users/<MYUSERNAME>/.local/bin/uv",
+      "args": [
+          "--directory",
+          "<PATH TO JIRA MCP>",
+          "run",
+          "mcp-server-jira"
+      ],
+      "env": {
+          "JIRA_SERVER_URL": "https://<ORG>.atlassian.net/",
+          "JIRA_AUTH_METHOD": "token_auth",
+          "JIRA_USERNAME": "<USERNAME>",
+          "JIRA_TOKEN": "<TOKEN>"
+      }
+    }
+  }
+}
+```
 
-4. Now you can interact with Jira by asking Claude questions like:
+3. Now you can interact with Jira by asking Claude questions like:
    - "Show me all my projects in Jira"
    - "Get details for issue PROJECT-123"
    - "Create a new bug in the PROJECT with summary 'Fix login issue'"
@@ -103,10 +129,10 @@ The server supports multiple authentication methods:
 For Jira Server/Data Center with username and password:
 
 ```bash
-export JIRA_SERVER_URL="https://jira.example.com"
-export JIRA_AUTH_METHOD="basic_auth"
-export JIRA_USERNAME="your_username"
-export JIRA_PASSWORD="your_password"
+JIRA_SERVER_URL="https://jira.example.com"
+JIRA_AUTH_METHOD="basic_auth"
+JIRA_USERNAME="your_username"
+JIRA_PASSWORD="your_password"
 ```
 
 ### API Token (Jira Cloud)
@@ -114,10 +140,10 @@ export JIRA_PASSWORD="your_password"
 For Jira Cloud using an API token:
 
 ```bash
-export JIRA_SERVER_URL="https://your-domain.atlassian.net"
-export JIRA_AUTH_METHOD="basic_auth"
-export JIRA_USERNAME="your_email@example.com"
-export JIRA_TOKEN="your_api_token"
+JIRA_SERVER_URL="https://your-domain.atlassian.net"
+JIRA_AUTH_METHOD="basic_auth"
+JIRA_USERNAME="your_email@example.com"
+JIRA_TOKEN="your_api_token"
 ```
 
 ### Personal Access Token (Jira Server/Data Center)
@@ -125,9 +151,9 @@ export JIRA_TOKEN="your_api_token"
 For Jira Server/Data Center (8.14+) using a PAT:
 
 ```bash
-export JIRA_SERVER_URL="https://jira.example.com"
-export JIRA_AUTH_METHOD="token_auth"
-export JIRA_TOKEN="your_personal_access_token"
+JIRA_SERVER_URL="https://jira.example.com"
+JIRA_AUTH_METHOD="token_auth"
+JIRA_TOKEN="your_personal_access_token"
 ```
 
 ## Available Tools
@@ -141,5 +167,4 @@ export JIRA_TOKEN="your_personal_access_token"
 7. `transition_issue`: Transition a Jira issue to a new status
 
 ## License
-
 MIT
