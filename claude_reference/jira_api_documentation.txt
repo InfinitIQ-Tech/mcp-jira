@@ -1,0 +1,2902 @@
+6. API Documentation
+6.1. jira package
+6.1.1. jira.client module
+Jira Client module.
+
+This module implements a friendly (well, friendlier) interface between the raw JSON responses from Jira and the Resource/dict abstractions provided by this library. Users will construct a JIRA object as described below. Full API documentation can be found at: https://jira.readthedocs.io/en/latest/.
+
+jira.client.cloud_api(client_method: Callable) → Callable[source]
+A convenience decorator to check if the Jira instance is cloud.
+
+Checks if the client instance is talking to Cloud Jira. If it is, return the result of the called client method. If not, return None and log a warning.
+
+Parameters:
+client_method – The method that is being called by the client.
+
+Returns:
+Either the result of the wrapped function or None.
+
+Raises:
+JIRAError – In the case the error is not an HTTP error with a status code.
+
+NotJIRAInstanceError – In the case that the first argument to this method is not a client.JIRA instance.
+
+jira.client.experimental_atlassian_api(client_method: Callable) → Callable[source]
+A convenience decorator to inform if a client method is experimental.
+
+Indicates the path covered by the client method is experimental. If the path disappears or the method becomes disallowed, this logs an error and returns None. If another kind of exception is raised, this reraises.
+
+Raises:
+JIRAError – In the case the error is not an HTTP error with a status code.
+
+NotJIRAInstanceError – In the case that the first argument to this method is is not a client.JIRA instance.
+
+Returns:
+Either the result of the wrapped function or None.
+
+jira.client.translate_resource_args(func: Callable)[source]
+Decorator that converts Issue and Project resources to their keys when used as arguments.
+
+Parameters:
+func (Callable) – the function to decorate
+
+class jira.client.ResultList(iterable: Iterable | None = None, _startAt: int = 0, _maxResults: int = 0, _total: int | None = None, _isLast: bool | None = None)[source]
+Bases: list, Generic[ResourceType]
+
+__init__(iterable: Iterable | None = None, _startAt: int = 0, _maxResults: int = 0, _total: int | None = None, _isLast: bool | None = None) → None[source]
+Results List.
+
+Parameters:
+iterable (Iterable) – [description]. Defaults to None.
+
+_startAt (int) – Start page. Defaults to 0.
+
+_maxResults (int) – Max results per page. Defaults to 0.
+
+_total (Optional[int]) – Total results from query. Defaults to 0.
+
+_isLast (Optional[bool]) – True to mark this page is the last page? (Default: None). see The official API docs
+
+class jira.client.QshGenerator(context_path)[source]
+Bases: object
+
+__init__(context_path)[source]
+class jira.client.JiraCookieAuth(session: ResilientSession, session_api_url: str, auth: tuple[str, str])[source]
+Bases: AuthBase
+
+Jira Cookie Authentication.
+
+Allows using cookie authentication as described by jira api docs
+
+__init__(session: ResilientSession, session_api_url: str, auth: tuple[str, str])[source]
+Cookie Based Authentication.
+
+Parameters:
+session (ResilientSession) – The Session object to communicate with the API.
+
+session_api_url (str) – The session api url to use.
+
+auth (Tuple[str, str]) – The username, password tuple.
+
+property cookies
+init_session()[source]
+Initialise the Session object’s cookies, so we can use the session cookie.
+
+Raises HTTPError if the post returns an erroring http response
+
+handle_401(response: Response, **kwargs) → Response[source]
+Refresh cookies if the session cookie has expired. Then retry the request.
+
+Parameters:
+response (requests.Response) – the response with the possible 401 to handle
+
+Returns:
+requests.Response
+
+process_original_request(original_request: PreparedRequest)[source]
+update_cookies(original_request: PreparedRequest)[source]
+send_request(request: PreparedRequest)[source]
+class jira.client.TokenAuth(token: str)[source]
+Bases: AuthBase
+
+Bearer Token Authentication.
+
+__init__(token: str)[source]
+class jira.client.JIRA(server: str | None = None, options: dict[str, str | bool | Any] | None = None, basic_auth: tuple[str, str] | None = None, token_auth: str | None = None, oauth: dict[str, Any] | None = None, jwt: dict[str, Any] | None = None, kerberos=False, kerberos_options: dict[str, Any] | None = None, validate=False, get_server_info: bool = True, async_: bool = False, async_workers: int = 5, logging: bool = True, max_retries: int = 3, proxies: Any | None = None, timeout: None | float | tuple[float, float] | tuple[float, None] = None, auth: tuple[str, str] | None = None, default_batch_sizes: dict[type[Resource], int | None] | None = None)[source]
+Bases: object
+
+User interface to Jira.
+
+Clients interact with Jira by constructing an instance of this object and calling its methods. For addressable resources in Jira – those with “self” links – an appropriate subclass of jira.resources.Resource will be returned with customized update() and delete() methods, along with attribute access to fields. This means that calls of the form issue.fields.summary will be resolved into the proper lookups to return the JSON value at that mapping. Methods that do not return resources will return a dict constructed from the JSON response or a scalar value; see each method’s documentation for details on what that method returns.
+
+Without any arguments, this client will connect anonymously to the Jira instance started by the Atlassian Plugin SDK from one of the ‘atlas-run’, atlas-debug or atlas-run-standalone commands. By default, this instance runs at http://localhost:2990/jira. The options argument can be used to set the Jira instance to use.
+
+Authentication is handled with the basic_auth argument. If authentication is supplied (and is accepted by Jira), the client will remember it for subsequent requests.
+
+For quick command line access to a server, see the jirashell script included with this distribution.
+
+The easiest way to instantiate is using j = JIRA("https://jira.atlassian.com")
+
+DEFAULT_OPTIONS = {'agile_rest_api_version': '1.0', 'agile_rest_path': 'agile', 'async': False, 'async_workers': 5, 'auth_url': '/rest/auth/1/session', 'check_update': False, 'client_cert': None, 'context_path': '/', 'default_batch_size': {<class 'jira.resources.Resource'>: 100}, 'delay_reload': 0, 'headers': {'Cache-Control': 'no-cache', 'Content-Type': 'application/json', 'X-Atlassian-Token': 'no-check'}, 'resilient': True, 'rest_api_version': '2', 'rest_path': 'api', 'server': 'http://localhost:2990/jira', 'verify': True}
+checked_version = False
+JIRA_BASE_URL = '{server}/rest/{rest_path}/{rest_api_version}/{path}'
+AGILE_BASE_URL = '{server}/rest/{agile_rest_path}/{agile_rest_api_version}/{path}'
+__init__(server: str | None = None, options: dict[str, str | bool | Any] | None = None, basic_auth: tuple[str, str] | None = None, token_auth: str | None = None, oauth: dict[str, Any] | None = None, jwt: dict[str, Any] | None = None, kerberos=False, kerberos_options: dict[str, Any] | None = None, validate=False, get_server_info: bool = True, async_: bool = False, async_workers: int = 5, logging: bool = True, max_retries: int = 3, proxies: Any | None = None, timeout: None | float | tuple[float, float] | tuple[float, None] = None, auth: tuple[str, str] | None = None, default_batch_sizes: dict[type[Resource], int | None] | None = None)[source]
+Construct a Jira client instance.
+
+Without any arguments, this client will connect anonymously to the Jira instance started by the Atlassian Plugin SDK from one of the ‘atlas-run’, atlas-debug or atlas-run-standalone commands. By default, this instance runs at http://localhost:2990/jira. The options argument can be used to set the Jira instance to use.
+
+Authentication is handled with the basic_auth or token_auth argument. If authentication is supplied (and is accepted by Jira), the client will remember it for subsequent requests.
+
+For quick command line access to a server, see the jirashell script included with this distribution.
+
+The easiest way to instantiate is using j = JIRA("https://jira.atlasian.com")
+
+Parameters:
+server (Optional[str]) – The server address and context path to use. Defaults to http://localhost:2990/jira.
+
+options (Optional[Dict[str, bool, Any]]) –
+
+Specify the server and properties this client will use. Use a dict with any of the following properties:
+
+server – the server address and context path to use. Defaults to http://localhost:2990/jira.
+
+rest_path – the root REST path to use. Defaults to api, where the Jira REST resources live.
+
+rest_api_version – the version of the REST resources under rest_path to use. Defaults to 2.
+
+agile_rest_path - the REST path to use for Jira Agile requests. Defaults to agile.
+
+verify (Union[bool, str]) – Verify SSL certs. (Default: True). Or path to a CA_BUNDLE file or directory with certificates of trusted CAs, for the requests library to use.
+
+client_cert (Union[str, Tuple[str,str]]) – Path to file with both cert and key or a tuple of (cert,key), for the requests library to use for client side SSL.
+
+check_update – Check whether using the newest python-jira library version.
+
+headers – a dict to update the default headers the session uses for all API requests.
+
+basic_auth (Optional[Tuple[str, str]]) – A tuple of username and password to use when establishing a session via HTTP BASIC authentication.
+
+token_auth (Optional[str]) – A string containing the token necessary for (PAT) bearer token authorization.
+
+oauth (Optional[Any]) –
+
+A dict of properties for OAuth authentication. The following properties are required:
+
+access_token – OAuth access token for the user
+
+access_token_secret – OAuth access token secret to sign with the key
+
+consumer_key – key of the OAuth application link defined in Jira
+
+key_cert – private key file to sign requests with (should be the pair of the public key supplied to Jira in the OAuth application link)
+
+signature_method (Optional) – The signature method to use with OAuth. Defaults to oauthlib.oauth1.SIGNATURE_HMAC_SHA1
+
+kerberos (bool) – True to enable Kerberos authentication. (Default: False)
+
+kerberos_options (Optional[Dict[str,str]]) –
+
+A dict of properties for Kerberos authentication. The following properties are possible:
+
+mutual_authentication – string DISABLED or OPTIONAL.
+
+Example kerberos_options structure: {'mutual_authentication': 'DISABLED'}
+
+jwt (Optional[Any]) –
+
+A dict of properties for JWT authentication supported by Atlassian Connect. The following properties are required:
+
+secret – shared secret as delivered during ‘installed’ lifecycle event (see https://developer.atlassian.com/static/connect/docs/latest/modules/lifecycle.html for details)
+
+payload – dict of fields to be inserted in the JWT payload, e.g. ‘iss’
+
+Example jwt structure: {'secret': SHARED_SECRET, 'payload': {'iss': PLUGIN_KEY}}
+
+validate (bool) – True makes your credentials first to be validated. Remember that if you are accessing Jira as anonymous it will fail. (Default: False).
+
+get_server_info (bool) – True fetches server version info first to determine if some API calls are available. (Default: True).
+
+async (bool) – True enables async requests for those actions where we implemented it, like issue update() or delete(). (Default: False).
+
+async_workers (int) – Set the number of worker threads for async operations.
+
+timeout (Optional[Union[Union[float, int], Tuple[float, float]]]) – Set a read/connect timeout for the underlying calls to Jira. Obviously this means that you cannot rely on the return code when this is enabled.
+
+max_retries (int) – Sets the amount Retries for the HTTP sessions initiated by the client. (Default: 3)
+
+proxies (Optional[Any]) – Sets the proxies for the HTTP session.
+
+auth (Optional[Tuple[str,str]]) – Set a cookie auth token if this is required.
+
+logging (bool) – True enables loglevel to info => else critical. (Default: True)
+
+default_batch_sizes (Optional[Dict[Type[Resource], Optional[int]]]) – Manually specify the batch-sizes for the paginated retrieval of different item types. Resource is used as a fallback for every item type not specified. If an item type is mapped to None no fallback occurs, instead the JIRA-backend will use its default batch-size. By default all Resources will be queried in batches of 100. E.g., setting this to {Issue: 500, Resource: None} will make search_issues() query Issues in batches of 500, while every other item type’s batch-size will be controlled by the backend. (Default: None)
+
+property server_url: str
+Return the server url.
+
+Returns:
+str
+
+close()[source]
+client_info() → str[source]
+Get the server this client is connected to.
+
+find(resource_format: str, ids: tuple[str, str] | int | str = '') → Resource[source]
+Find Resource object for any addressable resource on the server.
+
+This method is a universal resource locator for any REST-ful resource in Jira. The argument resource_format is a string of the form resource, resource/{0}, resource/{0}/sub, resource/{0}/sub/{1}, etc. The format placeholders will be populated from the ids argument if present. The existing authentication session will be used.
+
+The return value is an untyped Resource object, which will not support specialized Resource.update() or Resource.delete() behavior. Moreover, it will not know to return an issue Resource if the client uses the resource issue path. For this reason, it is intended to support resources that are not included in the standard Atlassian REST API.
+
+Parameters:
+resource_format (str) – the subpath to the resource string
+
+ids (Optional[Tuple]) – values to substitute in the resource_format string
+
+Returns:
+Resource
+
+async_do(size: int = 10)[source]
+Execute all asynchronous jobs and wait for them to finish. By default it will run on 10 threads.
+
+Parameters:
+size (int) – number of threads to run on.
+
+application_properties(key: str | None = None) → dict[str, str] | list[dict[str, str]][source]
+Return the mutable server application properties.
+
+Parameters:
+key (Optional[str]) – the single property to return a value for
+
+Returns:
+Union[Dict[str, str], List[Dict[str, str]]]
+
+set_application_property(key: str, value: str)[source]
+Set the application property.
+
+Parameters:
+key (str) – key of the property to set
+
+value (str) – value to assign to the property
+
+applicationlinks(cached: bool = True) → list[source]
+List of application links.
+
+Returns:
+List[Dict] – json, or empty list
+
+attachment(id: str) → Attachment[source]
+Get an attachment Resource from the server for the specified ID.
+
+Parameters:
+id (str) – The Attachment ID
+
+Returns:
+Attachment
+
+attachment_meta() → dict[str, int][source]
+Get the attachment metadata.
+
+Returns:
+Dict[str, int]
+
+add_attachment(issue: str | int, attachment: str | BufferedReader, filename: str | None = None) → Attachment[source]
+Attach an attachment to an issue and returns a Resource for it.
+
+The client will not attempt to open or validate the attachment; it expects a file-like object to be ready for its use. The user is still responsible for tidying up (e.g., closing the file, killing the socket, etc.)
+
+Parameters:
+issue (Union[str, int]) – the issue to attach the attachment to
+
+attachment (Union[str,BufferedReader]) – file-like object to attach to the issue, also works if it is a string with the filename.
+
+filename (str) – optional name for the attached file. If omitted, the file object’s name attribute is used. If you acquired the file-like object by any other method than open(), make sure that a name is specified in one way or the other.
+
+Returns:
+Attachment
+
+delete_attachment(id: str) → Response[source]
+Delete attachment by id.
+
+Parameters:
+id (str) – ID of the attachment to delete
+
+Returns:
+Response
+
+component(id: str)[source]
+Get a component Resource from the server.
+
+Parameters:
+id (str) – ID of the component to get
+
+create_component(name: str, project: str, description=None, leadUserName=None, assigneeType=None, isAssigneeTypeValid=False) → Component[source]
+Create a component inside a project and return a Resource for it.
+
+Parameters:
+name (str) – name of the component
+
+project (str) – key of the project to create the component in
+
+description (str) – a description of the component
+
+leadUserName (Optional[str]) – the username of the user responsible for this component
+
+assigneeType (Optional[str]) – see the ComponentBean.AssigneeType class for valid values
+
+isAssigneeTypeValid (bool) – True specifies whether the assignee type is acceptable (Default: False)
+
+Returns:
+Component
+
+component_count_related_issues(id: str)[source]
+Get the count of related issues for a component.
+
+Parameters:
+id (str) – ID of the component to use
+
+delete_component(id: str) → Response[source]
+Delete component by id.
+
+Parameters:
+id (str) – ID of the component to use
+
+Returns:
+Response
+
+custom_field_option(id: str) → CustomFieldOption[source]
+Get a custom field option Resource from the server.
+
+Parameters:
+id (str) – ID of the custom field to use
+
+Returns:
+CustomFieldOption
+
+dashboards(filter=None, startAt=0, maxResults=20) → ResultList[Dashboard][source]
+Return a ResultList of Dashboard resources and a total count.
+
+Parameters:
+filter (Optional[str]) – either “favourite” or “my”, the type of dashboards to return
+
+startAt (int) – index of the first dashboard to return (Default: 0)
+
+maxResults (int) – maximum number of dashboards to return. If maxResults set to False, it will try to get all items in batches. (Default: 20)
+
+Returns:
+ResultList[Dashboard]
+
+dashboard(id: str) → Dashboard[source]
+Get a dashboard Resource from the server.
+
+Parameters:
+id (str) – ID of the dashboard to get.
+
+Returns:
+Dashboard
+
+create_dashboard(**kwargs)[source]
+copy_dashboard(**kwargs)[source]
+update_dashboard_automatic_refresh_minutes(**kwargs)[source]
+dashboard_item_property_keys(dashboard_id: str, item_id: str) → ResultList[DashboardItemPropertyKey][source]
+Return a ResultList of a Dashboard gadget’s property keys.
+
+Parameters:
+dashboard_id (str) – ID of dashboard.
+
+item_id (str) – ID of dashboard item (DashboardGadget).
+
+Returns:
+ResultList[DashboardItemPropertyKey]
+
+dashboard_item_property(dashboard_id: str, item_id: str, property_key: str) → DashboardItemProperty[source]
+Get the item property for a specific dashboard item (DashboardGadget).
+
+Parameters:
+dashboard_id (str) – of the dashboard.
+
+item_id (str) – ID of the item (DashboardGadget) on the dashboard.
+
+property_key (str) – KEY of the gadget property.
+
+Returns:
+DashboardItemProperty
+
+set_dashboard_item_property(dashboard_id: str, item_id: str, property_key: str, value: dict[str, Any]) → DashboardItemProperty[source]
+Set a dashboard item property.
+
+Parameters:
+dashboard_id (str) – Dashboard id.
+
+item_id (str) – ID of dashboard item (DashboardGadget) to add property_key to.
+
+property_key (str) – The key of the property to set.
+
+value (dict[str, Any]) – The dictionary containing the value of the property key.
+
+Returns:
+DashboardItemProperty
+
+dashboard_gadgets(**kwargs)[source]
+all_dashboard_gadgets(**kwargs)[source]
+add_gadget_to_dashboard(**kwargs)[source]
+fields() → list[dict[str, Any]][source]
+Return a list of all issue fields.
+
+Returns:
+List[Dict[str, Any]]
+
+filter(id: str) → Filter[source]
+Get a filter Resource from the server.
+
+Parameters:
+id (str) – ID of the filter to get.
+
+Returns:
+Filter
+
+favourite_filters() → list[Filter][source]
+Get a list of filter Resources which are the favourites of the currently authenticated user.
+
+Returns:
+List[Filter]
+
+create_filter(name: str | None = None, description: str | None = None, jql: str | None = None, favourite: bool | None = None) → Filter[source]
+Create a new filter and return a filter Resource for it.
+
+Parameters:
+name (str) – name of the new filter
+
+description (str) – Useful human-readable description of the new filter
+
+jql (str) – query string that defines the filter
+
+favourite (Optional[bool]) – True adds this filter to the current user’s favorites (Default: None)
+
+Returns:
+Filter
+
+update_filter(filter_id, name: str | None = None, description: str | None = None, jql: str | None = None, favourite: bool | None = None)[source]
+Update a filter and return a filter Resource for it.
+
+Parameters:
+name (Optional[str]) – name of the new filter
+
+description (Optional[str]) – Useful human-readable description of the new filter
+
+jql (Optional[str]) – query string that defines the filter
+
+favourite (Optional[bool]) – True to add this filter to the current user’s favorites (Default: None)
+
+group(id: str, expand: Any | None = None) → Group[source]
+Get a group Resource from the server.
+
+Parameters:
+id (str) – ID of the group to get
+
+expand (Optional[Any]) – Extra information to fetch inside each resource
+
+Returns:
+Group
+
+groups(query: str | None = None, exclude: Any | None = None, maxResults: int = 9999) → list[str][source]
+Return a list of groups matching the specified criteria.
+
+Parameters:
+query (Optional[str]) – filter groups by name with this string
+
+exclude (Optional[Any]) – filter out groups by name with this string
+
+maxResults (int) – maximum results to return. (Default: 9999)
+
+Returns:
+List[str]
+
+group_members(group: str) → OrderedDict[source]
+Return a hash or users with their information. Requires Jira 6.0 or will raise NotImplemented.
+
+Parameters:
+group (str) – Name of the group.
+
+add_group(groupname: str) → bool[source]
+Create a new group in Jira.
+
+Parameters:
+groupname (str) – The name of the group you wish to create.
+
+Returns:
+bool – True if successful.
+
+remove_group(groupname: str) → bool[source]
+Delete a group from the Jira instance.
+
+Parameters:
+groupname (str) – The group to be deleted from the Jira instance.
+
+Returns:
+bool – Returns True on success.
+
+issue(id: Issue | str, fields: str | None = None, expand: str | None = None, properties: str | None = None) → Issue[source]
+Get an issue Resource from the server.
+
+Parameters:
+id (Union[Issue, str]) – ID or key of the issue to get
+
+fields (Optional[str]) – comma-separated string of issue fields to include in the results
+
+expand (Optional[str]) – extra information to fetch inside each resource
+
+properties (Optional[str]) – extra properties to fetch inside each result
+
+Returns:
+Issue
+
+create_issue(fields: dict[str, Any] | None = None, prefetch: bool = True, **fieldargs) → Issue[source]
+Create a new issue and return an issue Resource for it.
+
+Each keyword argument (other than the predefined ones) is treated as a field name and the argument’s value is treated as the intended value for that field – if the fields argument is used, all other keyword arguments will be ignored.
+
+By default, the client will immediately reload the issue Resource created by this method in order to return a complete Issue object to the caller; this behavior can be controlled through the ‘prefetch’ argument.
+
+Jira projects may contain many different issue types. Some issue screens have different requirements for fields in a new issue. This information is available through the ‘createmeta’ set of methods. Further examples are available here: https://developer.atlassian.com/display/JIRADEV/JIRA+REST+API+Example+-+Create+Issue
+
+Parameters:
+fields (Optional[Dict[str, Any]]) – a dict containing field names and the values to use. If present, all other keyword arguments will be ignored
+
+prefetch (bool) – True reloads the created issue Resource so all of its data is present in the value returned (Default: True)
+
+Returns:
+Issue
+
+create_issues(field_list: list[dict[str, Any]], prefetch: bool = True) → list[dict[str, Any]][source]
+Bulk create new issues and return an issue Resource for each successfully created issue.
+
+See create_issue documentation for field information.
+
+Parameters:
+field_list (List[Dict[str, Any]]) – a list of dicts each containing field names and the values to use. Each dict is an individual issue to create and is subject to its minimum requirements.
+
+prefetch (bool) – True reloads the created issue Resource so all of its data is present in the value returned (Default: True)
+
+Returns:
+List[Dict[str, Any]]
+
+supports_service_desk()[source]
+Returns if the Jira instance supports service desk.
+
+Returns:
+bool
+
+create_customer(email: str, displayName: str) → Customer[source]
+Create a new customer and return an issue Resource for it.
+
+Parameters:
+email (str) – Customer Email
+
+displayName (str) – Customer display name
+
+Returns:
+Customer
+
+service_desks() → list[ServiceDesk][source]
+Get a list of ServiceDesk Resources from the server visible to the current authenticated user.
+
+Returns:
+List[ServiceDesk]
+
+service_desk(id: str) → ServiceDesk[source]
+Get a Service Desk Resource from the server.
+
+Parameters:
+id (str) – ID or key of the Service Desk to get
+
+Returns:
+ServiceDesk
+
+create_customer_request(fields: dict[str, Any] | None = None, prefetch: bool = True, **fieldargs) → Issue[source]
+Create a new customer request and return an issue Resource for it.
+
+Each keyword argument (other than the predefined ones) is treated as a field name and the argument’s value is treated as the intended value for that field – if the fields argument is used, all other keyword arguments will be ignored.
+
+By default, the client will immediately reload the issue Resource created by this method in order to return a complete Issue object to the caller; this behavior can be controlled through the ‘prefetch’ argument.
+
+Jira projects may contain many issue types. Some issue screens have different requirements for fields in a new issue. This information is available through the ‘createmeta’ set of methods. Further examples are available here: https://developer.atlassian.com/display/JIRADEV/JIRA+REST+API+Example+-+Create+Issue
+
+Parameters:
+fields (Dict[str, Any]) – a dict containing field names and the values to use. If present, all other keyword arguments will be ignored
+
+prefetch (bool) – True reloads the created issue Resource so all of its data is present in the value returned (Default: True)
+
+Returns:
+Issue
+
+createmeta_issuetypes(projectIdOrKey: str | int, startAt: int = 0, maxResults: int = 50) → dict[str, Any][source]
+Get the issue types metadata for a given project, required to create issues.
+
+Deprecated since version 3.6.0: Use project_issue_types() instead.
+
+This API was introduced in JIRA Server / DC 8.4 as a replacement for the more general purpose API ‘createmeta’. For details see: https://confluence.atlassian.com/jiracore/createmeta-rest-endpoint-to-be-removed-975040986.html
+
+Parameters:
+projectIdOrKey (Union[str, int]) – id or key of the project for which to get the metadata.
+
+startAt (int) – Index of the first issue to return. (Default: 0)
+
+maxResults (int) – Maximum number of issues to return. Total number of results is available in the total attribute of the returned ResultList. If maxResults evaluates to False, it will try to get all issues in batches. (Default: 50)
+
+Returns:
+Dict[str, Any]
+
+createmeta_fieldtypes(projectIdOrKey: str | int, issueTypeId: str | int, startAt: int = 0, maxResults: int = 50) → dict[str, Any][source]
+Get the field metadata for a given project and issue type, required to create issues.
+
+Deprecated since version 3.6.0: Use project_issue_fields() instead.
+
+This API was introduced in JIRA Server / DC 8.4 as a replacement for the more general purpose API ‘createmeta’. For details see: https://confluence.atlassian.com/jiracore/createmeta-rest-endpoint-to-be-removed-975040986.html
+
+Parameters:
+projectIdOrKey (Union[str, int]) – id or key of the project for which to get the metadata.
+
+issueTypeId (Union[str, int]) – id of the issue type for which to get the metadata.
+
+startAt (int) – Index of the first issue to return. (Default: 0)
+
+maxResults (int) – Maximum number of issues to return. Total number of results is available in the total attribute of the returned ResultList. If maxResults evaluates to False, it will try to get all issues in batches. (Default: 50)
+
+Returns:
+Dict[str, Any]
+
+createmeta(projectKeys: tuple[str, str] | str | None = None, projectIds: list | tuple[str, str] = [], issuetypeIds: list[str] | None = None, issuetypeNames: str | None = None, expand: str | None = None) → dict[str, Any][source]
+Get the metadata required to create issues, optionally filtered by projects and issue types.
+
+Parameters:
+projectKeys (Optional[Union[Tuple[str, str], str]]) – keys of the projects to filter the results with. Can be a single value or a comma-delimited string. May be combined with projectIds.
+
+projectIds (Union[List, Tuple[str, str]]) – IDs of the projects to filter the results with. Can be a single value or a comma-delimited string. May be combined with projectKeys.
+
+issuetypeIds (Optional[List[str]]) – IDs of the issue types to filter the results with. Can be a single value or a comma-delimited string. May be combined with issuetypeNames.
+
+issuetypeNames (Optional[str]) – Names of the issue types to filter the results with. Can be a single value or a comma-delimited string. May be combined with issuetypeIds.
+
+expand (Optional[str]) – extra information to fetch inside each resource.
+
+Returns:
+Dict[str, Any]
+
+assign_issue(issue: int | str, assignee: str | None) → bool[source]
+Assign an issue to a user.
+
+Parameters:
+issue (Union[int, str]) – the issue ID or key to assign
+
+assignee (str) – the user to assign the issue to. None will set it to unassigned. -1 will set it to Automatic.
+
+Returns:
+bool
+
+comments(issue: int | str, expand: str | None = None) → list[Comment][source]
+Get a list of comment Resources of the issue provided.
+
+Parameters:
+issue (Union[int, str]) – the issue ID or key to get the comments from
+
+expand (Optional[str]) – extra information to fetch for each comment such as renderedBody and properties.
+
+Returns:
+List[Comment]
+
+comment(issue: int | str, comment: str, expand: str | None = None) → Comment[source]
+Get a comment Resource from the server for the specified ID.
+
+Parameters:
+issue (Union[int, str]) – the issue ID or key to get the comment from
+
+comment (str) – ID of the comment to get
+
+expand (Optional[str]) – extra information to fetch for each comment such as renderedBody and properties.
+
+Returns:
+Comment
+
+add_comment(issue: str | int | Issue, body: str, visibility: dict[str, str] | None = None, is_internal: bool = False) → Comment[source]
+Add a comment from the current authenticated user on the specified issue and return a Resource for it.
+
+Parameters:
+issue (Union[str, int, jira.resources.Issue]) – ID or key of the issue to add the comment to
+
+body (str) – Text of the comment to add
+
+visibility (Optional[Dict[str, str]]) – a dict containing two entries: “type” and “value”. “type” is ‘role’ (or ‘group’ if the Jira server has configured comment visibility for groups) “value” is the name of the role (or group) to which viewing of this comment will be restricted.
+
+is_internal (bool) – True marks the comment as ‘Internal’ in Jira Service Desk (Default: False)
+
+Returns:
+Comment – the created comment
+
+editmeta(issue: str | int)[source]
+Get the edit metadata for an issue.
+
+Parameters:
+issue (Union[str, int]) – the issue to get metadata for
+
+Returns:
+Dict[str, Dict[str, Dict[str, Any]]]
+
+remote_links(issue: str | int) → list[RemoteLink][source]
+Get a list of remote link Resources from an issue.
+
+Parameters:
+issue (Union[str, int]) – the issue to get remote links from
+
+Returns:
+List[RemoteLink]
+
+remote_link(issue: str | int, id: str) → RemoteLink[source]
+Get a remote link Resource from the server.
+
+Parameters:
+issue (Union[str, int]) – the issue holding the remote link
+
+id (str) – ID of the remote link
+
+Returns:
+RemoteLink
+
+add_remote_link(issue: str, destination: Issue | dict[str, Any], globalId: str | None = None, application: dict[str, Any] | None = None, relationship: str | None = None) → RemoteLink[source]
+Add a remote link from an issue to an external application and returns a remote link Resource for it.
+
+destination should be a dict containing at least url to the linked external URL and title to display for the link inside Jira.
+
+For definitions of the allowable fields for destination and the keyword arguments globalId, application and relationship, see https://developer.atlassian.com/display/JIRADEV/JIRA+REST+API+for+Remote+Issue+Links.
+
+Parameters:
+issue (str) – the issue to add the remote link to
+
+destination (Union[Issue, Dict[str, Any]]) – the link details to add (see the above link for details)
+
+globalId (Optional[str]) – unique ID for the link (see the above link for details)
+
+application (Optional[Dict[str,Any]]) – application information for the link (see the above link for details)
+
+relationship (Optional[str]) – relationship description for the link (see the above link for details)
+
+Returns:
+RemoteLink – the added remote link
+
+add_simple_link(issue: str, object: dict[str, Any])[source]
+Add a simple remote link from an issue to web resource.
+
+This avoids the admin access problems from add_remote_link by just using a simple object and presuming all fields are correct and not requiring more complex application data.
+
+object should be a dict containing at least url to the linked external URL and title to display for the link inside Jira
+
+For definitions of the allowable fields for object , see https://developer.atlassian.com/display/JIRADEV/JIRA+REST+API+for+Remote+Issue+Links.
+
+Parameters:
+issue (str) – the issue to add the remote link to
+
+object (Dict[str,Any]) – the dictionary used to create remotelink data
+
+Returns:
+RemoteLink
+
+transitions(issue: str | int | Issue, id: str | None = None, expand=None)[source]
+Get a list of the transitions available on the specified issue to the current user.
+
+Parameters:
+issue (Union[str, int, jira.resources.Issue]) – ID or key of the issue to get the transitions from
+
+id (Optional[str]) – if present, get only the transition matching this ID
+
+expand (Optional) – extra information to fetch inside each transition
+
+Returns:
+Any – json of response
+
+find_transitionid_by_name(issue: str | int | Issue, transition_name: str) → int | None[source]
+Get a transitionid available on the specified issue to the current user.
+
+Look at https://developer.atlassian.com/static/rest/jira/6.1.html#d2e1074 for json reference
+
+Parameters:
+issue (Union[str, int, jira.resources.Issue]) – ID or key of the issue to get the transitions from
+
+transition_name (str) – name of transition we are looking for
+
+Returns:
+Optional[int] – returns the id is found None when it’s not
+
+transition_issue(issue: str | int | Issue, transition: str, fields: dict[str, Any] | None = None, comment: str | None = None, worklog: str | None = None, **fieldargs)[source]
+Perform a transition on an issue.
+
+Each keyword argument (other than the predefined ones) is treated as a field name and the argument’s value is treated as the intended value for that field – if the fields argument is used, all other keyword arguments will be ignored. Field values will be set on the issue as part of the transition process.
+
+Parameters:
+issue (Union[str, int, jira.resources.Issue]) – ID or key of the issue to perform the transition on
+
+transition (str) – ID or name of the transition to perform
+
+fields (Optional[Dict[str,Any]]) – a dict containing field names and the values to use.
+
+comment (Optional[str]) – String to add as comment to the issue when performing the transition.
+
+worklog (Optional[str]) – String to add as time spent on the issue when performing the transition.
+
+**fieldargs – If present, all other keyword arguments will be ignored
+
+votes(issue: str | int) → Votes[source]
+Get a votes Resource from the server.
+
+Parameters:
+issue (Union[str, int]) – ID or key of the issue to get the votes for
+
+Returns:
+Votes
+
+project_issue_security_level_scheme(project: str) → IssueSecurityLevelScheme[source]
+Get a IssueSecurityLevelScheme Resource from the server.
+
+Parameters:
+project (str) – ID or key of the project to get the IssueSecurityLevelScheme for
+
+Returns:
+IssueSecurityLevelScheme – The issue security level scheme
+
+project_notification_scheme(project: str) → NotificationScheme[source]
+Get a NotificationScheme Resource from the server.
+
+Parameters:
+project (str) – ID or key of the project to get the NotificationScheme for
+
+Returns:
+NotificationScheme – The notification scheme
+
+project_permissionscheme(project: str) → PermissionScheme[source]
+Get a PermissionScheme Resource from the server.
+
+Parameters:
+project (str) – ID or key of the project to get the permissionscheme for
+
+Returns:
+PermissionScheme – The permission scheme
+
+project_priority_scheme(project: str) → PriorityScheme[source]
+Get a PriorityScheme Resource from the server.
+
+Parameters:
+project (str) – ID or key of the project to get the PriorityScheme for
+
+Returns:
+PriorityScheme – The priority scheme
+
+project_workflow_scheme(project: str) → WorkflowScheme[source]
+Get a WorkflowScheme Resource from the server.
+
+Parameters:
+project (str) – ID or key of the project to get the WorkflowScheme for
+
+Returns:
+WorkflowScheme – The workflow scheme
+
+add_vote(issue: str | int) → Response[source]
+Register a vote for the current authenticated user on an issue.
+
+Parameters:
+issue (Union[str, int]) – ID or key of the issue to vote on
+
+Returns:
+Response
+
+remove_vote(issue: str | int)[source]
+Remove the current authenticated user’s vote from an issue.
+
+Parameters:
+issue (Union[str, int]) – ID or key of the issue to remove vote on
+
+watchers(issue: str | int) → Watchers[source]
+Get a watchers Resource from the server for an issue.
+
+Parameters:
+issue (Union[str, int]) – ID or key of the issue to get the watchers for
+
+Returns:
+Watchers
+
+add_watcher(issue: str | int, watcher: str) → Response[source]
+Add a user to an issue’s watchers list.
+
+Parameters:
+issue (Union[str, int]) – ID or key of the issue affected
+
+watcher (str) – name of the user to add to the watchers list
+
+Returns:
+Response
+
+remove_watcher(issue: str | int, watcher: str) → Response[source]
+Remove a user from an issue’s watch list.
+
+Parameters:
+issue (Union[str, int]) – ID or key of the issue affected
+
+watcher (str) – name of the user to remove from the watchers list
+
+Returns:
+Response
+
+worklogs(issue: str | int) → list[Worklog][source]
+Get a list of worklog Resources from the server for an issue.
+
+Parameters:
+issue (Union[str, int]) – ID or key of the issue to get worklogs from
+
+Returns:
+List[Worklog]
+
+worklog(issue: str | int, id: str) → Worklog[source]
+Get a specific worklog Resource from the server.
+
+Parameters:
+issue (Union[str, int]) – ID or key of the issue to get the worklog from
+
+id (str) – ID of the worklog to get
+
+Returns:
+Worklog
+
+add_worklog(issue: str | int, timeSpent: str | None = None, timeSpentSeconds: str | None = None, adjustEstimate: str | None = None, newEstimate: str | None = None, reduceBy: str | None = None, comment: str | None = None, started: datetime | None = None, user: str | None = None, visibility: dict[str, Any] | None = None) → Worklog[source]
+Add a new worklog entry on an issue and return a Resource for it.
+
+Parameters:
+issue (Union[str, int]) – the issue to add the worklog to
+
+timeSpent (Optional[str]) – a worklog entry with this amount of time spent, e.g. “2d”
+
+timeSpentSeconds (Optional[str]) – a worklog entry with this amount of time spent in seconds
+
+adjustEstimate (Optional[str]) – allows the user to provide specific instructions to update the remaining time estimate of the issue. The value can either be new, leave, manual or auto (default).
+
+newEstimate (Optional[str]) – the new value for the remaining estimate field. e.g. “2d”
+
+reduceBy (Optional[str]) – the amount to reduce the remaining estimate by e.g. “2d”
+
+comment (Optional[str]) – optional worklog comment
+
+started (Optional[datetime.datetime]) – Moment when the work is logged, if not specified will default to now
+
+user (Optional[str]) – the user ID or name to use for this worklog
+
+visibility (Optional[Dict[str,Any]]) – Details about any restrictions in the visibility of the worklog. Example of visibility options when creating or updating a worklog. { "type": "group", "value": "<string>", "identifier": "<string>"}
+
+Returns:
+Worklog
+
+issue_properties(issue: str) → list[IssueProperty][source]
+Get a list of issue property Resource from the server for an issue.
+
+Parameters:
+issue (str) – ID or key of the issue to get properties from
+
+Returns:
+List[IssueProperty]
+
+issue_property(issue: str, key: str) → IssueProperty[source]
+Get a specific issue property Resource from the server.
+
+Parameters:
+issue (str) – ID or key of the issue to get the property from
+
+key (str) – Key of the property to get
+
+Returns:
+IssueProperty
+
+add_issue_property(issue: str, key: str, data) → Response[source]
+Add or update a specific issue property Resource.
+
+Parameters:
+issue (str) – ID or key of the issue to set the property to
+
+key (str) – Key of the property to set
+
+data – The data to set for the property
+
+Returns:
+Response
+
+create_issue_link(type: str | IssueLinkType, inwardIssue: str, outwardIssue: str, comment: dict[str, Any] | None = None) → Response[source]
+Create a link between two issues.
+
+Parameters:
+type (Union[str,IssueLinkType]) – the type of link to create
+
+inwardIssue – the issue to link from
+
+outwardIssue – the issue to link to
+
+comment (Optional[Dict[str, Any]]) – a comment to add to the issues with the link. Should be a dict containing body and visibility fields: body being the text of the comment and visibility being a dict containing two entries: type and value. type is role (or group if the Jira server has configured comment visibility for groups) and value is the name of the role (or group) to which viewing of this comment will be restricted.
+
+Returns:
+Response
+
+delete_issue_link(id: str)[source]
+Delete a link between two issues.
+
+Parameters:
+id (str) – ID of the issue link to delete
+
+issue_link(id: str) → IssueLink[source]
+Get an issue link Resource from the server.
+
+Parameters:
+id (str) – ID of the issue link to get
+
+Returns:
+IssueLink
+
+issue_link_types(force: bool = False) → list[IssueLinkType][source]
+Get a list of issue link type Resources from the server.
+
+Parameters:
+force (bool) – True forces an update of the cached IssueLinkTypes. (Default: False)
+
+Returns:
+List[IssueLinkType]
+
+issue_link_type(id: str) → IssueLinkType[source]
+Get an issue link type Resource from the server.
+
+Parameters:
+id (str) – ID of the issue link type to get
+
+Returns:
+IssueLinkType
+
+issue_types() → list[IssueType][source]
+Get a list of issue type Resources from the server.
+
+Returns:
+List[IssueType]
+
+project_issue_types(project: str, startAt: int = 0, maxResults: int = 50) → ResultList[IssueType][source]
+Get a list of issue type Resources available in a given project from the server.
+
+This API was introduced in JIRA Server / DC 8.4 as a replacement for the more general purpose API ‘createmeta’. For details see: https://confluence.atlassian.com/jiracore/createmeta-rest-endpoint-to-be-removed-975040986.html
+
+Parameters:
+project (str) – ID or key of the project to query issue types from.
+
+startAt (int) – Index of first issue type to return. (Default: 0)
+
+maxResults (int) – Maximum number of issue types to return. (Default: 50)
+
+Returns:
+ResultList[IssueType]
+
+project_issue_fields(project: str, issue_type: str, startAt: int = 0, maxResults: int = 50) → ResultList[Field][source]
+Get a list of field type Resources available for a project and issue type from the server.
+
+This API was introduced in JIRA Server / DC 8.4 as a replacement for the more general purpose API ‘createmeta’. For details see: https://confluence.atlassian.com/jiracore/createmeta-rest-endpoint-to-be-removed-975040986.html
+
+Parameters:
+project (str) – ID or key of the project to query field types from.
+
+issue_type (str) – ID of the issue type to query field types from.
+
+startAt (int) – Index of first issue type to return. (Default: 0)
+
+maxResults (int) – Maximum number of issue types to return. (Default: 50)
+
+Returns:
+ResultList[Field]
+
+issue_type(id: str) → IssueType[source]
+Get an issue type Resource from the server.
+
+Parameters:
+id (str) – ID of the issue type to get
+
+Returns:
+IssueType
+
+issue_type_by_name(name: str, project: str | None = None) → IssueType[source]
+Get issue type by name.
+
+Parameters:
+name (str) – Name of the issue type
+
+project (str) – Key or ID of the project. If set, only issue types available for that project will be looked up.
+
+Returns:
+IssueType
+
+request_types(service_desk: ServiceDesk) → list[RequestType][source]
+Returns request types supported by a service desk instance.
+
+Parameters:
+service_desk (ServiceDesk) – The service desk instance.
+
+Returns:
+List[RequestType]
+
+request_type_by_name(service_desk: ServiceDesk, name: str)[source]
+my_permissions(projectKey: str | None = None, projectId: str | None = None, issueKey: str | None = None, issueId: str | None = None, permissions: str | None = None) → dict[str, dict[str, dict[str, str]]][source]
+Get a dict of all available permissions on the server.
+
+permissions is a comma-separated value list of permission keys that is required in Jira Cloud. For possible and allowable permission values, see https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-permission-schemes/#built-in-permissions
+
+Parameters:
+projectKey (Optional[str]) – limit returned permissions to the specified project
+
+projectId (Optional[str]) – limit returned permissions to the specified project
+
+issueKey (Optional[str]) – limit returned permissions to the specified issue
+
+issueId (Optional[str]) – limit returned permissions to the specified issue
+
+permissions (Optional[str]) – limit returned permissions to the specified csv permission keys (cloud required field)
+
+Returns:
+Dict[str, Dict[str, Dict[str, str]]]
+
+priorities() → list[Priority][source]
+Get a list of priority Resources from the server.
+
+Returns:
+List[Priority]
+
+priority(id: str) → Priority[source]
+Get a priority Resource from the server.
+
+Parameters:
+id (str) – ID of the priority to get
+
+Returns:
+Priority
+
+projects(expand: str | None = None) → list[Project][source]
+Get a list of project Resources from the server visible to the current authenticated user.
+
+Parameters:
+expand (Optional[str]) – extra information to fetch for each project such as projectKeys and description.
+
+Returns:
+List[Project]
+
+project(id: str, expand: str | None = None) → Project[source]
+Get a project Resource from the server.
+
+Parameters:
+id (str) – ID or key of the project to get
+
+expand (Optional[str]) – extra information to fetch for the project such as projectKeys and description.
+
+Returns:
+Project
+
+project_avatars(project: str)[source]
+Get a dict of all avatars for a project visible to the current authenticated user.
+
+Parameters:
+project (str) – ID or key of the project to get avatars for
+
+create_temp_project_avatar(project: str, filename: str, size: int, avatar_img: bytes, contentType: str | None = None, auto_confirm: bool = False)[source]
+Register an image file as a project avatar.
+
+The avatar created is temporary and must be confirmed before it can be used.
+
+Avatar images are specified by a filename, size, and file object. By default, the client will attempt to autodetect the picture’s content type this mechanism relies on libmagic and will not work out of the box on Windows systems (see Their Documentation for details on how to install support).
+
+The contentType argument can be used to explicitly set the value (note that Jira will reject any type other than the well-known ones for images, e.g. image/jpg, image/png, etc.)
+
+This method returns a dict of properties that can be used to crop a subarea of a larger image for use. This dict should be saved and passed to confirm_project_avatar() to finish the avatar creation process. If you want to confirm the avatar with Jira’s default cropping, pass the ‘auto_confirm’ argument with a truthy value and confirm_project_avatar() will be called for you before this method returns.
+
+Parameters:
+project (str) – ID or key of the project to create the avatar in
+
+filename (str) – name of the avatar file
+
+size (int) – size of the avatar file
+
+avatar_img (bytes) – file-like object holding the avatar
+
+contentType (str) – explicit specification for the avatar image’s content-type
+
+auto_confirm (bool) – True to automatically confirm the temporary avatar by calling confirm_project_avatar() with the return value of this method. (Default: False)
+
+confirm_project_avatar(project: str, cropping_properties: dict[str, Any])[source]
+Confirm the temporary avatar image previously uploaded with the specified cropping.
+
+After a successful registry with create_temp_project_avatar(), use this method to confirm the avatar for use. The final avatar can be a subarea of the uploaded image, which is customized with the cropping_properties: the return value of create_temp_project_avatar() should be used for this argument.
+
+Parameters:
+project (str) – ID or key of the project to confirm the avatar in
+
+cropping_properties (Dict[str,Any]) – a dict of cropping properties from create_temp_project_avatar()
+
+set_project_avatar(project: str, avatar: str)[source]
+Set a project’s avatar.
+
+Parameters:
+project (str) – ID or key of the project to set the avatar on
+
+avatar (str) – ID of the avatar to set
+
+delete_project_avatar(project: str, avatar: str) → Response[source]
+Delete a project’s avatar.
+
+Parameters:
+project (str) – ID or key of the project to delete the avatar from
+
+avatar (str) – ID of the avatar to delete
+
+Returns:
+Response
+
+project_components(project: str) → list[Component][source]
+Get a list of component Resources present on a project.
+
+Parameters:
+project (str) – ID or key of the project to get components from
+
+Returns:
+List[Component]
+
+project_versions(project: str) → list[Version][source]
+Get a list of version Resources present on a project.
+
+Parameters:
+project (str) – ID or key of the project to get versions from
+
+Returns:
+List[Version]
+
+get_project_version_by_name(project: str, version_name: str) → Version | None[source]
+Get a version Resource by its name present on a project.
+
+Parameters:
+project (str) – ID or key of the project to get versions from
+
+version_name (str) – name of the version to search for
+
+Returns:
+Optional[Version]
+
+rename_version(project: str, old_name: str, new_name: str) → None[source]
+Rename a version Resource on a project.
+
+Parameters:
+project (str) – ID or key of the project to get versions from
+
+old_name (str) – old name of the version to rename
+
+new_name (str) – new name of the version to rename
+
+project_roles(project: str) → dict[str, dict[str, str]][source]
+Get a dict of role names to resource locations for a project.
+
+Parameters:
+project (str) – ID or key of the project to get roles from
+
+Returns:
+Dict[str, Dict[str, str]]
+
+project_role(project: str, id: str) → Role[source]
+Get a role Resource.
+
+Parameters:
+project (str) – ID or key of the project to get the role from
+
+id (str) – ID of the role to get
+
+Returns:
+Role
+
+resolutions() → list[Resolution][source]
+Get a list of resolution Resources from the server.
+
+Returns:
+List[Resolution]
+
+resolution(id: str) → Resolution[source]
+Get a resolution Resource from the server.
+
+Parameters:
+id (str) – ID of the resolution to get
+
+Returns:
+Resolution
+
+search_issues(jql_str: str, startAt: int = 0, maxResults: int = 50, validate_query: bool = True, fields: str | list[str] | None = '*all', expand: str | None = None, properties: str | None = None, *, json_result: Literal[False] = False, use_post: bool = False) → ResultList[Issue][source]
+search_issues(jql_str: str, startAt: int = 0, maxResults: int = 50, validate_query: bool = True, fields: str | list[str] | None = '*all', expand: str | None = None, properties: str | None = None, *, json_result: Literal[True], use_post: bool = False) → dict[str, Any]
+Get a ResultList of issue Resources matching a JQL search string.
+
+Parameters:
+jql_str (str) – The JQL search string.
+
+startAt (int) – Index of the first issue to return. (Default: 0)
+
+maxResults (int) – Maximum number of issues to return. Total number of results is available in the total attribute of the returned ResultList. If maxResults evaluates to False, it will try to get all issues in batches. (Default: 50)
+
+validate_query (bool) – True to validate the query. (Default: True)
+
+fields (Optional[Union[str, List[str]]]) – comma-separated string or list of issue fields to include in the results. Default is to include all fields.
+
+expand (Optional[str]) – extra information to fetch inside each resource
+
+properties (Optional[str]) – extra properties to fetch inside each result
+
+json_result (bool) – True to return a JSON response. When set to False a ResultList will be returned. (Default: False)
+
+use_post (bool) – True to use POST endpoint to fetch issues.
+
+Returns:
+Union[Dict,ResultList] – Dict if json_result=True
+
+security_level(id: str) → SecurityLevel[source]
+Get a security level Resource.
+
+Parameters:
+id (str) – ID of the security level to get
+
+Returns:
+SecurityLevel
+
+server_info() → dict[str, Any][source]
+Get a dict of server information for this Jira instance.
+
+Returns:
+Dict[str, Any]
+
+myself() → dict[str, Any][source]
+Get a dict of server information for this Jira instance.
+
+Returns:
+Dict[str, Any]
+
+statuses() → list[Status][source]
+Get a list of all status Resources from the server.
+
+Refer to JIRA.issue_types_for_project() for getting statuses for a specific issue type within a specific project.
+
+Returns:
+List[Status]
+
+issue_types_for_project(projectIdOrKey: str) → list[IssueType][source]
+Get a list of issue types available within the project.
+
+Each project has a set of valid issue types and each issue type has a set of valid statuses. The valid statuses for a given issue type can be extracted via: issue_type_x.statuses
+
+Returns:
+List[IssueType]
+
+status(id: str) → Status[source]
+Get a status Resource from the server.
+
+Parameters:
+id (str) – ID of the status resource to get
+
+Returns:
+Status
+
+statuscategories() → list[StatusCategory][source]
+Get a list of status category Resources from the server.
+
+Returns:
+List[StatusCategory]
+
+statuscategory(id: int) → StatusCategory[source]
+Get a status category Resource from the server.
+
+Parameters:
+id (int) – ID of the status category resource to get
+
+Returns:
+StatusCategory
+
+user(id: str, expand: Any | None = None) → User[source]
+Get a user Resource from the server.
+
+Parameters:
+id (str) – ID of the user to get
+
+expand (Optional[Any]) – Extra information to fetch inside each resource
+
+Returns:
+User
+
+search_assignable_users_for_projects(username: str, projectKeys: str, startAt: int = 0, maxResults: int = 50) → ResultList[source]
+Get a list of user Resources that match the search string and can be assigned issues for projects.
+
+Parameters:
+username (str) – A string to match usernames against
+
+projectKeys (str) – Comma-separated list of project keys to check for issue assignment permissions
+
+startAt (int) – Index of the first user to return (Default: 0)
+
+maxResults (int) – Maximum number of users to return. If maxResults evaluates as False, it will try to get all users in batches. (Default: 50)
+
+Returns:
+ResultList
+
+search_assignable_users_for_issues(username: str | None = None, project: str | None = None, issueKey: str | None = None, expand: Any | None = None, startAt: int = 0, maxResults: int = 50, query: str | None = None)[source]
+Get a list of user Resources that match the search string for assigning or creating issues.
+
+“username” query parameter is deprecated in Jira Cloud; the expected parameter now is “query”, which can just be the full email again. But the “user” parameter is kept for backwards compatibility, i.e. Jira Server/Data Center.
+
+This method is intended to find users that are eligible to create issues in a project or be assigned to an existing issue. When searching for eligible creators, specify a project. When searching for eligible assignees, specify an issue key.
+
+Parameters:
+username (Optional[str]) – A string to match usernames against
+
+project (Optional[str]) – Filter returned users by permission in this project (expected if a result will be used to create an issue)
+
+issueKey (Optional[str]) – Filter returned users by this issue (expected if a result will be used to edit this issue)
+
+expand (Optional[Any]) – Extra information to fetch inside each resource
+
+startAt (int) – Index of the first user to return (Default: 0)
+
+maxResults (int) – maximum number of users to return. If maxResults evaluates as False, it will try to get all items in batches. (Default: 50)
+
+query (Optional[str]) – Search term. It can just be the email.
+
+Returns:
+ResultList
+
+user_avatars(username: str) → dict[str, Any][source]
+Get a dict of avatars for the specified user.
+
+Parameters:
+username (str) – the username to get avatars for
+
+Returns:
+Dict[str, Any]
+
+create_temp_user_avatar(user: str, filename: str, size: int, avatar_img: bytes, contentType: Any | None = None, auto_confirm: bool = False)[source]
+Register an image file as a user avatar.
+
+The avatar created is temporary and must be confirmed before it can be used.
+
+Avatar images are specified by a filename, size, and file object. By default, the client will attempt to autodetect the picture’s content type: this mechanism relies on libmagic and will not work out of the box on Windows systems (see Their Documentation for details on how to install support). The contentType argument can be used to explicitly set the value (note that Jira will reject any type other than the well-known ones for images, e.g. image/jpg, image/png, etc.)
+
+This method returns a dict of properties that can be used to crop a subarea of a larger image for use. This dict should be saved and passed to confirm_user_avatar() to finish the avatar creation process. If you want to confirm the avatar with Jira’s default cropping, pass the auto_confirm argument with a truthy value and confirm_user_avatar() will be called for you before this method returns.
+
+Parameters:
+user (str) – User to register the avatar for
+
+filename (str) – name of the avatar file
+
+size (int) – size of the avatar file
+
+avatar_img (bytes) – file-like object containing the avatar
+
+contentType (Optional[Any]) – explicit specification for the avatar image’s content-type
+
+auto_confirm (bool) – True to automatically confirm the temporary avatar by calling confirm_user_avatar() with the return value of this method. (Default: False)
+
+confirm_user_avatar(user: str, cropping_properties: dict[str, Any])[source]
+Confirm the temporary avatar image previously uploaded with the specified cropping.
+
+After a successful registry with create_temp_user_avatar(), use this method to confirm the avatar for use. The final avatar can be a subarea of the uploaded image, which is customized with the cropping_properties: the return value of create_temp_user_avatar() should be used for this argument.
+
+Parameters:
+user (str) – the user to confirm the avatar for
+
+cropping_properties (Dict[str,Any]) – a dict of cropping properties from create_temp_user_avatar()
+
+set_user_avatar(username: str, avatar: str) → Response[source]
+Set a user’s avatar.
+
+Parameters:
+username (str) – the user to set the avatar for
+
+avatar (str) – ID of the avatar to set
+
+Returns:
+Response
+
+delete_user_avatar(username: str, avatar: str) → Response[source]
+Delete a user’s avatar.
+
+Parameters:
+username (str) – the user to delete the avatar from
+
+avatar (str) – ID of the avatar to remove
+
+Returns:
+Response
+
+delete_remote_link(issue: str | Issue, *, internal_id: str | None = None, global_id: str | None = None) → Response[source]
+Delete remote link from issue by internalId or globalId.
+
+Parameters:
+issue (str) – Key (or Issue) of Issue
+
+internal_id (Optional[str]) – InternalID of the remote link to delete
+
+global_id (Optional[str]) – GlobalID of the remote link to delete
+
+Returns:
+Response
+
+search_users(user: str | None = None, startAt: int = 0, maxResults: int = 50, includeActive: bool = True, includeInactive: bool = False, query: str | None = None) → ResultList[User][source]
+Get a list of user Resources that match the specified search string.
+
+“username” query parameter is deprecated in Jira Cloud; the expected parameter now is “query”, which can just be the full email again. But the “user” parameter is kept for backwards compatibility, i.e. Jira Server/Data Center.
+
+Parameters:
+user (Optional[str]) – a string to match usernames, name or email against.
+
+startAt (int) – index of the first user to return.
+
+maxResults (int) – maximum number of users to return. If maxResults evaluates as False, it will try to get all items in batches.
+
+includeActive (bool) – True to include active users in the results. (Default: True)
+
+includeInactive (bool) – True to include inactive users in the results. (Default: False)
+
+query (Optional[str]) – Search term. It can just be the email.
+
+Returns:
+ResultList[User]
+
+search_allowed_users_for_issue(user: str, issueKey: str | None = None, projectKey: str | None = None, startAt: int = 0, maxResults: int = 50) → ResultList[source]
+Get a list of user Resources that match a username string and have browse permission for the issue or project.
+
+Parameters:
+user (str) – a string to match usernames against.
+
+issueKey (Optional[str]) – find users with browse permission for this issue.
+
+projectKey (Optional[str]) – find users with browse permission for this project.
+
+startAt (int) – index of the first user to return. (Default: 0)
+
+maxResults (int) – maximum number of users to return. If maxResults evaluates as False, it will try to get all items in batches. (Default: 50)
+
+Returns:
+ResultList
+
+create_version(name: str, project: str, description: str | None = None, releaseDate: Any | None = None, startDate: Any | None = None, archived: bool = False, released: bool = False) → Version[source]
+Create a version in a project and return a Resource for it.
+
+Parameters:
+name (str) – name of the version to create
+
+project (str) – key of the project to create the version in
+
+description (str) – a description of the version
+
+releaseDate (Optional[Any]) – the release date assigned to the version
+
+startDate (Optional[Any]) – The start date for the version
+
+archived (bool) – True to create an archived version. (Default: False)
+
+released (bool) – True to create a released version. (Default: False)
+
+Returns:
+Version
+
+move_version(id: str, after: str | None = None, position: str | None = None) → Version[source]
+Move a version within a project’s ordered version list and return a new version Resource for it.
+
+One, but not both, of after and position must be specified.
+
+Parameters:
+id (str) – ID of the version to move
+
+after (str) – the self attribute of a version to place the specified version after (that is, higher in the list)
+
+position (Optional[str]) – the absolute position to move this version to: must be one of First, Last, Earlier, or Later
+
+Returns:
+Version
+
+version(id: str, expand: Any | None = None) → Version[source]
+Get a version Resource.
+
+Parameters:
+id (str) – ID of the version to get
+
+expand (Optional[Any]) – extra information to fetch inside each resource
+
+Returns:
+Version
+
+version_count_related_issues(id: str)[source]
+Get a dict of the counts of issues fixed and affected by a version.
+
+Parameters:
+id (str) – the version to count issues for
+
+version_count_unresolved_issues(id: str)[source]
+Get the number of unresolved issues for a version.
+
+Parameters:
+id (str) – ID of the version to count issues for
+
+session() → User[source]
+Get a dict of the current authenticated user’s session information.
+
+Returns:
+User
+
+kill_session() → Response[source]
+Destroy the session of the current authenticated user.
+
+Returns:
+Response
+
+kill_websudo() → Response | None[source]
+Destroy the user’s current WebSudo session.
+
+Works only for non-cloud deployments, for others does nothing.
+
+Returns:
+Optional[Response]
+
+rename_user(old_user: str, new_user: str)[source]
+Rename a Jira user.
+
+Parameters:
+old_user (str) – Old username login
+
+new_user (str) – New username login
+
+delete_user(username: str) → bool[source]
+Deletes a Jira User.
+
+Parameters:
+username (str) – Username to delete
+
+Returns:
+bool – Success of user deletion
+
+deactivate_user(username: str) → str | int[source]
+Disable/deactivate the user.
+
+Parameters:
+username (str) – User to be deactivated.
+
+Returns:
+Union[str, int]
+
+reindex(force: bool = False, background: bool = True) → bool[source]
+Start jira re-indexing. Returns True if reindexing is in progress or not needed, or False.
+
+If you call reindex() without any parameters it will perform a background reindex only if Jira thinks it should do it.
+
+Parameters:
+force (bool) – True to reindex even if Jira doesn’t say this is needed. (Default: False)
+
+background (bool) – True to reindex in background, slower but does not impact the users. (Default: True)
+
+Returns:
+bool – True if reindexing is in progress or not needed
+
+backup(filename: str = 'backup.zip', attachments: bool = False) → bool | int | None[source]
+Will call jira export to backup as zipped xml. Returning with success does not mean that the backup process finished.
+
+Parameters:
+filename (str) – the filename for the backup (Default: “backup.zip”)
+
+attachments (bool) – True to also backup attachments (Default: False)
+
+Returns:
+Union[bool, int] – Returns True if successful else it returns the statuscode of the Response or False
+
+backup_progress() → dict[str, Any] | None[source]
+Return status of cloud backup as a dict.
+
+Is there a way to get progress for Server version?
+
+Returns:
+Optional[Dict[str, Any]]
+
+backup_complete() → bool | None[source]
+Return boolean based on ‘alternativePercentage’ and ‘size’ returned from backup_progress (cloud only).
+
+backup_download(filename: str | None = None)[source]
+Download backup file from WebDAV (cloud only).
+
+current_user(field: str | None = None) → str[source]
+Return the accountId (Cloud) else username of the current user.
+
+For anonymous users it will return a value that evaluates as False.
+
+Parameters:
+field (Optional[str]) – the name of the identifier field. Defaults to “accountId” for Jira Cloud, else “username”
+
+Returns:
+str – User’s accountId (Cloud) else username.
+
+delete_project(pid: str | Project, enable_undo: bool = True) → bool | None[source]
+Delete project from Jira.
+
+Parameters:
+pid (Union[str, Project]) – Jira projectID or Project or slug.
+
+enable_undo (bool) – Jira Cloud only. True moves to ‘Trash’. False permanently deletes.
+
+Raises:
+JIRAError – If project not found or not enough permissions
+
+ValueError – If pid parameter is not Project, slug or ProjectID
+
+Returns:
+bool – True if project was deleted
+
+templates() → dict[source]
+permissionschemes()[source]
+issue_type_schemes() → list[IssueTypeScheme][source]
+Get all issue type schemes defined (Admin required).
+
+Returns:
+List[IssueTypeScheme] – All the Issue Type Schemes available to the currently logged in user.
+
+issuesecurityschemes()[source]
+projectcategories()[source]
+avatars(entity='project')[source]
+notificationschemes()[source]
+screens()[source]
+workflowscheme()[source]
+workflows()[source]
+delete_screen(id: str)[source]
+delete_permissionscheme(id: str)[source]
+get_issue_type_scheme_associations(id: str) → list[Project][source]
+For the specified issue type scheme, returns all of the associated projects. (Admin required).
+
+Parameters:
+id (str) – The issue type scheme id.
+
+Returns:
+List[Project] – Associated Projects for the Issue Type Scheme.
+
+create_project(key: str, name: str | None = None, assignee: str | None = None, ptype: str = 'software', template_name: str | None = None, avatarId: int | None = None, issueSecurityScheme: int | None = None, permissionScheme: int | None = None, projectCategory: int | None = None, notificationScheme: int = 10000, categoryId: int | None = None, url: str = '')[source]
+Create a project with the specified parameters.
+
+Parameters:
+key (str) – Mandatory. Must match Jira project key requirements, usually only 2-10 uppercase characters.
+
+name (Optional[str]) – If not specified it will use the key value.
+
+assignee (Optional[str]) – Key of the lead, if not specified it will use current user.
+
+ptype (Optional[str]) – Determines the type of project that should be created. Defaults to ‘software’.
+
+template_name (Optional[str]) – Is used to create a project based on one of the existing project templates. If template_name is not specified, then it should use one of the default values.
+
+avatarId (Optional[int]) – ID of the avatar to use for the project.
+
+issueSecurityScheme (Optional[int]) – Determines the security scheme to use. If none provided, will fetch the scheme named ‘Default’ or the first scheme returned.
+
+permissionScheme (Optional[int]) – Determines the permission scheme to use. If none provided, will fetch the scheme named ‘Default Permission Scheme’ or the first scheme returned.
+
+projectCategory (Optional[int]) – Determines the category the project belongs to. If none provided, will fetch the one named ‘Default’ or the first category returned.
+
+notificationScheme (Optional[int]) – Determines the notification scheme to use.
+
+categoryId (Optional[int]) – Same as projectCategory. Can be used interchangeably.
+
+url (Optional[str]) – A link to information about the project, such as documentation.
+
+Returns:
+Union[bool,int] – Should evaluate to False if it fails otherwise it will be the new project id.
+
+add_user(username: str, email: str, directoryId: int = 1, password: str | None = None, fullname: str | None = None, notify: bool = False, active: bool = True, ignore_existing: bool = False, application_keys: list | None = None)[source]
+Create a new Jira user.
+
+Parameters:
+username (str) – the username of the new user
+
+email (str) – email address of the new user
+
+directoryId (int) – The directory ID the new user should be a part of (Default: 1)
+
+password (Optional[str]) – Optional, the password for the new user
+
+fullname (Optional[str]) – Optional, the full name of the new user
+
+notify (bool) – True to send a notification to the new user. (Default: False)
+
+active (bool) – True to make the new user active upon creation. (Default: True)
+
+ignore_existing (bool) – True to ignore existing users. (Default: False)
+
+application_keys (Optional[list]) – Keys of products user should have access to
+
+Raises:
+JIRAError – If username already exists and ignore_existing has not been set to True.
+
+Returns:
+bool – Whether the user creation was successful.
+
+add_user_to_group(username: str, group: str) → bool | dict[str, Any][source]
+Add a user to an existing group.
+
+Parameters:
+username (str) – Username that will be added to specified group.
+
+group (str) – Group that the user will be added to.
+
+Returns:
+Union[bool,Dict[str,Any]] – json response from Jira server for success or a value that evaluates as False in case of failure.
+
+remove_user_from_group(username: str, groupname: str) → bool[source]
+Remove a user from a group.
+
+Parameters:
+username (str) – The user to remove from the group.
+
+groupname (str) – The group that the user will be removed from.
+
+Returns:
+bool
+
+role() → list[dict[str, Any]][source]
+Return Jira role information.
+
+Returns:
+List[Dict[str,Any]] – List of current user roles
+
+get_igrid(issueid: str, customfield: str, schemeid: str)[source]
+boards(startAt: int = 0, maxResults: int = 50, type: str | None = None, name: str | None = None, projectKeyOrID=None) → ResultList[Board][source]
+Get a list of board resources.
+
+Parameters:
+startAt – The starting index of the returned boards. Base index: 0.
+
+maxResults – The maximum number of boards to return per page. Default: 50
+
+type – Filters results to boards of the specified type. Valid values: scrum, kanban.
+
+name – Filters results to boards that match or partially match the specified name.
+
+projectKeyOrID – Filters results to boards that match the specified project key or ID.
+
+Returns:
+ResultList[Board]
+
+sprints(board_id: int, extended: bool | None = None, startAt: int = 0, maxResults: int = 50, state: str | None = None) → ResultList[Sprint][source]
+Get a list of sprint Resources.
+
+Parameters:
+board_id (int) – the board to get sprints from
+
+extended (bool) – Deprecated.
+
+startAt (int) – the index of the first sprint to return (0 based)
+
+maxResults (int) – the maximum number of sprints to return
+
+state (str) – Filters results to sprints in specified states. Valid values: future, active, closed. You can define multiple states separated by commas
+
+Returns:
+ResultList[Sprint] – List of sprints.
+
+sprints_by_name(id: str | int, extended: bool = False, state: str | None = None) → dict[str, dict[str, Any]][source]
+Get a dictionary of sprint Resources where the name of the sprint is the key.
+
+Parameters:
+board_id (int) – the board to get sprints from
+
+extended (bool) – Deprecated.
+
+state (str) – Filters results to sprints in specified states. Valid values: future, active, closed. You can define multiple states separated by commas
+
+Returns:
+Dict[str, Dict[str, Any]] – dictionary of sprints with the sprint name as key
+
+update_sprint(id: str | int, name: str | None = None, startDate: Any | None = None, endDate: Any | None = None, state: str | None = None, goal: str | None = None) → dict[str, Any][source]
+Updates the sprint with the given values.
+
+Parameters:
+id (Union[str, int]) – The id of the sprint to update
+
+name (Optional[str]) – The name to update your sprint to
+
+startDate (Optional[Any]) – The start date for the sprint
+
+endDate (Optional[Any]) – The start date for the sprint
+
+state – (Optional[str]): The state of the sprint
+
+goal – (Optional[str]): The goal of the sprint
+
+Returns:
+Dict[str, Any]
+
+incompletedIssuesEstimateSum(board_id: str, sprint_id: str)[source]
+Return the total incompleted points this sprint.
+
+removed_issues(board_id: str, sprint_id: str)[source]
+Return the completed issues for the sprint.
+
+Returns:
+List[Issue]
+
+removedIssuesEstimateSum(board_id: str, sprint_id: str)[source]
+Return the total incompleted points this sprint.
+
+sprint_info(board_id: str, sprint_id: str) → dict[str, Any][source]
+Return the information about a sprint.
+
+Parameters:
+board_id (str) – the board retrieving issues from. Deprecated and ignored.
+
+sprint_id (str) – the sprint retrieving issues from
+
+Returns:
+Dict[str, Any]
+
+sprint(id: int) → Sprint[source]
+Return the information about a sprint.
+
+Parameters:
+sprint_id (int) – the sprint retrieving issues from
+
+Returns:
+Sprint
+
+delete_board(id)[source]
+Delete an agile board.
+
+create_board(name: str, filter_id: str, project_ids: str | None = None, preset: str = 'scrum', location_type: Literal['user', 'project'] = 'user', location_id: str | None = None) → Board[source]
+Create a new board for the project_ids.
+
+Parameters:
+name (str) – name of the Board (<255 characters).
+
+filter_id (str) – the Filter to use to create the Board. Note: if the user does not have the ‘Create shared objects’ permission and tries to create a shared board, a private board will be created instead (remember that board sharing depends on the filter sharing).
+
+project_ids (str) – Deprecated. See location_id.
+
+preset (str) – What preset/type to use for this Board, options: kanban, scrum, agility. (Default: “scrum”)
+
+location_type (str) – the location type. Available in Cloud. (Default: “user”)
+
+location_id (Optional[str]) – aka projectKeyOrId. The id of Project that the Board should be located under. Omit this for a ‘user’ location_type. Available in Cloud.
+
+Returns:
+Board – The newly created board
+
+create_sprint(name: str, board_id: int, startDate: Any | None = None, endDate: Any | None = None, goal: str | None = None) → Sprint[source]
+Create a new sprint for the board_id.
+
+Parameters:
+name (str) – Name of the sprint
+
+board_id (int) – Which board the sprint should be assigned.
+
+startDate (Optional[Any]) – Start date for the sprint.
+
+endDate (Optional[Any]) – End date for the sprint.
+
+goal (Optional[str]) – Goal for the sprint.
+
+Returns:
+Sprint – The newly created Sprint
+
+add_issues_to_sprint(sprint_id: int, issue_keys: list[str]) → Response[source]
+Add the issues in issue_keys to the sprint_id.
+
+The sprint must be started but not completed.
+
+If a sprint was completed, then have to also edit the history of the issue so that it was added to the sprint before it was completed, preferably before it started. A completed sprint’s issues also all have a resolution set before the completion date.
+
+If a sprint was not started, then have to edit the marker and copy the rank of each issue too.
+
+Parameters:
+sprint_id (int) – the sprint to add issues to
+
+issue_keys (List[str]) – the issues to add to the sprint
+
+Returns:
+Response
+
+add_issues_to_epic(epic_id: str, issue_keys: str | list[str], ignore_epics: bool | None = None) → Response[source]
+Add the issues in issue_keys to the epic_id.
+
+Issues can only exist in one Epic!
+
+Parameters:
+epic_id (str) – The ID for the epic where issues should be added.
+
+issue_keys (Union[str, List[str]]) – The list (or comma separated str) of issues to add to the epic
+
+ignore_epics (bool) – Deprecated.
+
+Returns:
+Response
+
+rank(issue: str, next_issue: str | None = None, prev_issue: str | None = None) → Response[source]
+Rank an issue before/after another using the default Ranking field, the one named ‘Rank’.
+
+Pass only ONE of next_issue or prev_issue.
+
+Parameters:
+issue (str) – issue key of the issue to be ranked before/after the second one.
+
+next_issue (str) – issue key that the first issue is to be ranked before.
+
+prev_issue (str) – issue key that the first issue is to be ranked after.
+
+Returns:
+Response
+
+move_to_backlog(issue_keys: list[str]) → Response[source]
+Move issues in issue_keys to the backlog, removing them from all sprints that have not been completed.
+
+Parameters:
+issue_keys (List[str]) – the issues to move to the backlog
+
+Raises:
+JIRAError – If moving issues to backlog fails
+
+Returns:
+Response
+
+pinned_comments(issue: int | str) → list[PinnedComment][source]
+Get a list of pinned comment Resources of the issue provided.
+
+Parameters:
+issue (Union[int, str]) – the issue ID or key to get the comments from
+
+Returns:
+List[PinnedComment]
+
+pin_comment(issue: int | str, comment: int | str, pin: bool) → Response[source]
+Pin/Unpin a comment on the issue.
+
+Parameters:
+issue (Union[int, str]) – the issue ID or key to get the comments from
+
+comment (Union[int, str]) – the comment ID
+
+pin (bool) – Pin (True) or Unpin (False)
+
+Returns:
+Response
+
+6.1.2. jira.config module
+Config handler.
+
+This module allows people to keep their jira server credentials outside their script, in a configuration file that is not saved in the source control.
+
+Also, this simplifies the scripts by not having to write the same initialization code for each script.
+
+jira.config.get_jira(profile: str | None = None, url: str = 'http://localhost:2990', username: str = 'admin', password: str = 'admin', appid=None, autofix=False, verify: bool | str = True)[source]
+Return a JIRA object by loading the connection details from the config.ini file.
+
+Parameters:
+profile (Optional[str]) – The name of the section from config.ini file that stores server config url/username/password
+
+url (str) – URL of the Jira server
+
+username (str) – username to use for authentication
+
+password (str) – password to use for authentication
+
+appid – appid
+
+autofix – autofix
+
+verify (Union[bool, str]) – True to indicate whether SSL certificates should be verified or str path to a CA_BUNDLE file or directory with certificates of trusted CAs. (Default: True)
+
+Returns:
+JIRA – an instance to a JIRA object.
+
+Raises:
+EnvironmentError –
+
+Usage:
+
+from jira.config import get_jira
+
+jira = get_jira(profile='jira')
+Also create a config.ini like this and put it in current directory, user home directory or PYTHONPATH.
+
+[jira]
+url=https://jira.atlassian.com
+# only the `url` is mandatory
+user=...
+pass=...
+appid=...
+verify=...
+6.1.3. jira.exceptions module
+exception jira.exceptions.JIRAError(text: str | None = None, status_code: int | None = None, url: str | None = None, request: Response | None = None, response: Response | None = None, **kwargs)[source]
+Bases: Exception
+
+General error raised for all problems in operation of the client.
+
+__init__(text: str | None = None, status_code: int | None = None, url: str | None = None, request: Response | None = None, response: Response | None = None, **kwargs)[source]
+Creates a JIRAError.
+
+Parameters:
+text (Optional[str]) – Message for the error.
+
+status_code (Optional[int]) – Status code for the error.
+
+url (Optional[str]) – Url related to the error.
+
+request (Optional[requests.Response]) – Request made related to the error.
+
+response (Optional[requests.Response]) – Response received related to the error.
+
+**kwargs – Will be used to get request headers.
+
+exception jira.exceptions.NotJIRAInstanceError(instance: Any)[source]
+Bases: Exception
+
+Raised in the case an object is not a JIRA instance.
+
+__init__(instance: Any)[source]
+6.1.4. jira.jirashell module
+Starts an interactive Jira session in an ipython terminal.
+
+Script arguments support changing the server and a persistent authentication over HTTP BASIC or Kerberos.
+
+jira.jirashell.oauth_dance(server, consumer_key, key_cert_data, print_tokens=False, verify=None)[source]
+jira.jirashell.process_config()[source]
+jira.jirashell.process_command_line()[source]
+jira.jirashell.get_config()[source]
+jira.jirashell.handle_basic_auth(auth, server)[source]
+jira.jirashell.main()[source]
+6.1.5. jira.resilientsession module
+class jira.resilientsession.PrepareRequestForRetry[source]
+Bases: object
+
+This class allows for the manipulation of the Request keyword arguments before a retry.
+
+The prepare() handles the processing of the Request keyword arguments.
+
+abstract prepare(original_request_kwargs: CaseInsensitiveDict) → CaseInsensitiveDict[source]
+Process the Request’s keyword arguments before retrying the Request.
+
+Parameters:
+original_request_kwargs (CaseInsensitiveDict) – The keyword arguments of the Request.
+
+Returns:
+CaseInsensitiveDict – The new keyword arguments to use in the retried Request.
+
+class jira.resilientsession.PassthroughRetryPrepare[source]
+Bases: PrepareRequestForRetry
+
+Returns the Request’s keyword arguments unchanged, when no change needs to be made before a retry.
+
+prepare(original_request_kwargs: CaseInsensitiveDict) → CaseInsensitiveDict[source]
+jira.resilientsession.raise_on_error(resp: Response | None, **kwargs) → TypeGuard[Response][source]
+Handle errors from a Jira Request.
+
+Parameters:
+resp (Optional[Response]) – Response from Jira request
+
+Raises:
+JIRAError – If Response is None
+
+JIRAError – for unhandled 400 status codes.
+
+Returns:
+TypeGuard[Response] – True if the passed in Response is all good.
+
+jira.resilientsession.parse_errors(resp: Response) → list[str][source]
+Parse a Jira Error messages from the Response.
+
+https://developer.atlassian.com/cloud/jira/platform/rest/v2/intro/#status-codes
+
+Parameters:
+resp (Response) – The Jira API request’s response.
+
+Returns:
+List[str] – The error messages list parsed from the Response. An empty list if no error.
+
+jira.resilientsession.parse_error_msg(resp: Response) → str[source]
+Parse a Jira Error messages from the Response and join them by comma.
+
+https://developer.atlassian.com/cloud/jira/platform/rest/v2/intro/#status-codes
+
+Parameters:
+resp (Response) – The Jira API request’s response.
+
+Returns:
+str – The error message parsed from the Response. An empty str if no error.
+
+class jira.resilientsession.ResilientSession(timeout=None, max_retries: int = 3, max_retry_delay: int = 60)[source]
+Bases: Session
+
+This class is supposed to retry requests that do return temporary errors.
+
+__recoverable() handles all retry-able errors.
+
+__init__(timeout=None, max_retries: int = 3, max_retry_delay: int = 60)[source]
+A Session subclass catered for the Jira API with exponential delaying retry.
+
+Parameters:
+timeout (Optional[Union[Union[float, int], Tuple[float, float]]]) – Connection/read timeout delay. Defaults to None.
+
+max_retries (int) – Max number of times to retry a request. Defaults to 3.
+
+max_retry_delay (int) – Max delay allowed between retries. Defaults to 60.
+
+request(method: str, url: str | bytes, _prepare_retry_class: ~jira.resilientsession.PrepareRequestForRetry = <jira.resilientsession.PassthroughRetryPrepare object>, **kwargs) → Response[source]
+This is an intentional override of Session.request() to inject some error handling and retry logic.
+
+Raises:
+Exception – Various exceptions as defined in py:method:raise_on_error.
+
+Returns:
+Response – The response.
+
+6.1.6. jira.resources module
+jira.client.ResourceType = alias of TypeVar(‘ResourceType’, contravariant=True, bound=jira.resources.Resource)
+Type variable.
+
+Usage:
+
+T = TypeVar('T')  # Can be anything
+A = TypeVar('A', str, bytes)  # Must be str or bytes
+Type variables exist primarily for the benefit of static type checkers. They serve as the parameters for generic types as well as for generic function definitions. See class Generic for more information on generic types. Generic functions work as follows:
+
+def repeat(x: T, n: int) -> List[T]:
+‘’’Return a list containing n references to x.’’’ return [x]*n
+
+def longest(x: A, y: A) -> A:
+‘’’Return the longest of two strings.’’’ return x if len(x) >= len(y) else y
+
+The latter example’s signature is essentially the overloading of (str, str) -> str and (bytes, bytes) -> bytes. Also note that if the arguments are instances of some subclass of str, the return type is still plain str.
+
+At runtime, isinstance(x, T) and issubclass(C, T) will raise TypeError.
+
+Type variables defined with covariant=True or contravariant=True can be used to declare covariant or contravariant generic types. See PEP 484 for more details. By default generic types are invariant in all type variables.
+
+Type variables can be introspected. e.g.:
+
+T.__name__ == ‘T’ T.__constraints__ == () T.__covariant__ == False T.__contravariant__ = False A.__constraints__ == (str, bytes)
+
+Note that only type variables defined in global scope can be pickled.
+
+Jira resource definitions.
+
+This module implements the Resource classes that translate JSON from Jira REST resources into usable objects.
+
+class jira.resources.Resource(resource: str, options: dict[str, Any], session: ResilientSession, base_url: str = '{server}/rest/{rest_path}/{rest_api_version}/{path}')[source]
+Bases: object
+
+Models a URL-addressable resource in the Jira REST API.
+
+All Resource objects provide the following: find() – get a resource from the server and load it into the current object (though clients should use the methods in the JIRA class instead of this method directly) update() – changes the value of this resource on the server and returns a new resource object for it delete() – deletes this resource from the server self – the URL of this resource on the server raw – dict of properties parsed out of the JSON response from the server
+
+Subclasses will implement update() and delete() as appropriate for the specific resource.
+
+All Resources have a resource path of the form:
+
+issue
+
+project/{0}
+
+issue/{0}/votes
+
+issue/{0}/comment/{1}
+
+where the bracketed numerals are placeholders for ID values that are filled in from the ids parameter to find().
+
+JIRA_BASE_URL = '{server}/rest/{rest_path}/{rest_api_version}/{path}'
+_READABLE_IDS = ('displayName', 'key', 'name', 'accountId', 'filename', 'value', 'scope', 'votes', 'id', 'mimeType', 'closed')
+_HASH_IDS = ('self', 'type', 'key', 'id', 'name')
+__init__(resource: str, options: dict[str, Any], session: ResilientSession, base_url: str = '{server}/rest/{rest_path}/{rest_api_version}/{path}')[source]
+Initializes a generic resource.
+
+Parameters:
+resource (str) – The name of the resource.
+
+options (Dict[str,str]) – Options for the new resource
+
+session (ResilientSession) – Session used for the resource.
+
+base_url (Optional[str]) – The Base Jira url.
+
+find(id: tuple[str, ...] | int | str, params: dict[str, str] | None = None)[source]
+Finds a resource based on the input parameters.
+
+Parameters:
+id (Union[Tuple[str, str], int, str]) – id
+
+params (Optional[Dict[str, str]]) – params
+
+_find_by_url(url: str, params: dict[str, str] | None = None)[source]
+Finds a resource on the specified url.
+
+The resource is loaded with the JSON data returned by doing a request on the specified url.
+
+Parameters:
+url (str) – url
+
+params (Optional[Dict[str, str]]) – params
+
+_get_url(path: str) → str[source]
+Gets the url for the specified path.
+
+Parameters:
+path (str) – str
+
+Returns:
+str
+
+update(fields: dict[str, Any] | None = None, async_: bool | None = None, jira: JIRA | None = None, notify: bool = True, **kwargs: Any)[source]
+Update this resource on the server.
+
+Keyword arguments are marshalled into a dict before being sent. If this resource doesn’t support PUT, a JIRAError will be raised; subclasses that specialize this method will only raise errors in case of user error.
+
+Parameters:
+fields (Optional[Dict[str, Any]]) – Fields which should be updated for the object.
+
+async (Optional[bool]) – True to add the request to the queue, so it can be executed later using async_run()
+
+jira (jira.client.JIRA) – Instance of Jira Client
+
+notify (bool) – True to notify watchers about the update, sets parameter notifyUsers. (Default: True). Admin or project admin permissions are required to disable the notification.
+
+kwargs (Any) – extra arguments to the PUT request.
+
+delete(params: dict[str, Any] | None = None) → Response | None[source]
+Delete this resource from the server, passing the specified query parameters.
+
+If this resource doesn’t support DELETE, a JIRAError will be raised; subclasses that specialize this method will only raise errors in case of user error.
+
+Parameters:
+params – Parameters for the delete request.
+
+Returns:
+Optional[Response] – Returns None if async
+
+_load(url: str, headers={}, params: dict[str, str] | None = None, path: str | None = None)[source]
+Load a resource.
+
+Parameters:
+url (str) – url
+
+headers (Optional[CaseInsensitiveDict]) – headers. Defaults to CaseInsensitiveDict().
+
+params (Optional[Dict[str,str]]) – params to get request. Defaults to None.
+
+path (Optional[str]) – field to get. Defaults to None.
+
+Raises:
+ValueError – If json cannot be loaded
+
+_parse_raw(raw: dict[str, Any])[source]
+Parse a raw dictionary to create a resource.
+
+Parameters:
+raw (Dict[str, Any])
+
+_default_headers(user_headers)[source]
+class jira.resources.Issue(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A Jira issue.
+
+class _IssueFields[source]
+Bases: AnyLike
+
+class _Comment[source]
+Bases: object
+
+__init__() → None[source]
+class _Worklog[source]
+Bases: object
+
+__init__() → None[source]
+__init__()[source]
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+update(fields: dict[str, Any] | None = None, update: dict[str, Any] | None = None, async_: bool | None = None, jira: JIRA | None = None, notify: bool = True, **fieldargs)[source]
+Update this issue on the server.
+
+Each keyword argument (other than the predefined ones) is treated as a field name and the argument’s value is treated as the intended value for that field – if the fields argument is used, all other keyword arguments will be ignored.
+
+Jira projects may contain many issue types. Some issue screens have different requirements for fields in an issue. This information is available through the JIRA.editmeta() method. Further examples are available here: https://developer.atlassian.com/display/JIRADEV/JIRA+REST+API+Example+-+Edit+issues
+
+Parameters:
+fields (Dict[str,Any]) – a dict containing field names and the values to use
+
+update (Dict[str,Any]) – a dict containing update the operations to apply
+
+async (Optional[bool]) – True to add the request to the queue, so it can be executed later using async_run() (Default: None))
+
+jira (Optional[jira.client.JIRA]) – JIRA instance.
+
+notify (bool) – True to notify watchers about the update, sets parameter notifyUsers. (Default: True). Admin or project admin permissions are required to disable the notification.
+
+fieldargs (dict) – keyword arguments will generally be merged into fields, except lists, which will be merged into updates
+
+get_field(field_name: str) → Any[source]
+Obtain the (parsed) value from the Issue’s field.
+
+Parameters:
+field_name (str) – The name of the field to get
+
+Raises:
+AttributeError – If the field does not exist or if the field starts with an _
+
+Returns:
+Any – Returns the parsed data stored in the field. For example, “project” would be of class Project
+
+add_field_value(field: str, value: str)[source]
+Add a value to a field that supports multiple values, without resetting the existing values.
+
+This should work with: labels, multiple checkbox lists, multiple select
+
+Parameters:
+field (str) – The field name
+
+value (str) – The field’s value
+
+delete(deleteSubtasks=False)[source]
+Delete this issue from the server.
+
+Parameters:
+deleteSubtasks (bool) – True to also delete subtasks. If any are present the Issue won’t be deleted (Default: True)
+
+permalink()[source]
+Get the URL of the issue, the browsable one not the REST one.
+
+Returns:
+str – URL of the issue
+
+class jira.resources.Comment(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+An issue comment.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+update(fields: dict[str, Any] | None = None, async_: bool | None = None, jira: JIRA | None = None, body: str = '', visibility: dict[str, str] | None = None, is_internal: bool = False, notify: bool = True)[source]
+Update a comment.
+
+Keyword arguments are marshalled into a dict before being sent.
+
+Parameters:
+fields (Optional[Dict[str, Any]]) – DEPRECATED => a comment doesn’t have fields
+
+async (Optional[bool]) – True to add the request to the queue, so it can be executed later using async_run() (Default: None))
+
+jira (jira.client.JIRA) – Instance of Jira Client
+
+visibility (Optional[Dict[str, str]]) – a dict containing two entries: “type” and “value”. “type” is ‘role’ (or ‘group’ if the Jira server has configured comment visibility for groups) “value” is the name of the role (or group) to which viewing of this comment will be restricted.
+
+body (str) – New text of the comment
+
+is_internal (bool) – True to mark the comment as ‘Internal’ in Jira Service Desk (Default: False)
+
+notify (bool) – True to notify watchers about the update, sets parameter notifyUsers. (Default: True). Admin or project admin permissions are required to disable the notification.
+
+class jira.resources.Project(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A Jira project.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.Attachment(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+An issue attachment.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+get()[source]
+Return the file content as a string.
+
+iter_content(chunk_size=1024)[source]
+Return the file content as an iterable stream.
+
+class jira.resources.Component(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A project component.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+delete(moveIssuesTo: str | None = None)[source]
+Delete this component from the server.
+
+Parameters:
+moveIssuesTo – the name of the component to which to move any issues this component is applied
+
+class jira.resources.Dashboard(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A Jira dashboard.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.DashboardItemProperty(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A jira dashboard item.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+update(dashboard_id: str, item_id: str, value: dict[str, Any]) → DashboardItemProperty[source]
+Update this resource on the server.
+
+Keyword arguments are marshalled into a dict before being sent. If this resource doesn’t support PUT, a JIRAError will be raised; subclasses that specialize this method will only raise errors in case of user error.
+
+Parameters:
+dashboard_id (str) – The id if the dashboard.
+
+item_id (str) – The id of the dashboard item (DashboardGadget) to target.
+
+value (dict[str, Any]) – The value of the targeted property key.
+
+Returns:
+DashboardItemProperty
+
+delete(dashboard_id: str, item_id: str) → Response[source]
+Delete dashboard item property.
+
+Parameters:
+dashboard_id (str) – The id of the dashboard.
+
+item_id (str) – The id of the dashboard item (DashboardGadget).
+
+Returns:
+Response
+
+class jira.resources.DashboardItemPropertyKey(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A jira dashboard item property key.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.Filter(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+An issue navigator filter.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.DashboardGadget(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A jira dashboard gadget.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+update(dashboard_id: str, color: str | None = None, position: dict[str, Any] | None = None, title: str | None = None) → DashboardGadget[source]
+Update this resource on the server.
+
+Keyword arguments are marshalled into a dict before being sent. If this resource doesn’t support PUT, a JIRAError will be raised; subclasses that specialize this method will only raise errors in case of user error.
+
+Parameters:
+dashboard_id (str) – The id of the dashboard to add the gadget to required.
+
+color (str) – The color of the gadget, should be one of: blue, red, yellow, green, cyan, purple, gray, or white.
+
+ignore_uri_and_module_key_validation (bool) – Whether to ignore the validation of the module key and URI. For example, when a gadget is created that is part of an application that is not installed.
+
+position (dict[str, int]) – A dictionary containing position information like - {“column”: 0, “row”, 1}.
+
+title (str) – The title of the gadget.
+
+Returns:
+DashboardGadget
+
+delete(dashboard_id: str) → Response[source]
+Delete gadget from dashboard.
+
+Parameters:
+dashboard_id (str) – The id of the dashboard.
+
+Returns:
+Response
+
+class jira.resources.Votes(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+Vote information on an issue.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.PermissionScheme(options, session, raw=None)[source]
+Bases: Resource
+
+Permissionscheme information on a project.
+
+__init__(options, session, raw=None)[source]
+class jira.resources.Watchers(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+Watcher information on an issue.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+delete(username)[source]
+Remove the specified user from the watchers list.
+
+class jira.resources.Worklog(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+Worklog on an issue.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+delete(adjustEstimate: str | None = None, newEstimate=None, increaseBy=None)[source]
+Delete this worklog entry from its associated issue.
+
+Parameters:
+adjustEstimate – one of new, leave, manual or auto. auto is the default and adjusts the estimate automatically. leave leaves the estimate unchanged by this deletion.
+
+newEstimate – combined with adjustEstimate=new, set the estimate to this value
+
+increaseBy – combined with adjustEstimate=manual, increase the remaining estimate by this amount
+
+class jira.resources.IssueLink(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+Link between two issues.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.IssueLinkType(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+Type of link between two issues.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.IssueProperty(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+Custom data against an issue.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+_find_by_url(url: str, params: dict[str, str] | None = None)[source]
+class jira.resources.IssueSecurityLevelScheme(options, session, raw=None)[source]
+Bases: Resource
+
+IssueSecurityLevelScheme information on a project.
+
+__init__(options, session, raw=None)[source]
+class jira.resources.IssueType(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+Type of issue.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.IssueTypeScheme(options, session, raw=None)[source]
+Bases: Resource
+
+An issue type scheme.
+
+__init__(options, session, raw=None)[source]
+class jira.resources.NotificationScheme(options, session, raw=None)[source]
+Bases: Resource
+
+NotificationScheme information on a project.
+
+__init__(options, session, raw=None)[source]
+class jira.resources.Priority(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+Priority that can be set on an issue.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.PriorityScheme(options, session, raw=None)[source]
+Bases: Resource
+
+PriorityScheme information on a project.
+
+__init__(options, session, raw=None)[source]
+class jira.resources.Version(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A version of a project.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+delete(moveFixIssuesTo=None, moveAffectedIssuesTo=None)[source]
+Delete this project version from the server.
+
+If neither of the arguments are specified, the version is removed from all issues it is attached to.
+
+Parameters:
+moveFixIssuesTo – in issues for which this version is a fix version, add this version to the fix version list
+
+moveAffectedIssuesTo – in issues for which this version is an affected version, add this version to the affected version list
+
+update(**kwargs)[source]
+Update this project version from the server. It is prior used to archive versions.
+
+Refer to Atlassian REST API documentation.
+
+Example:
+>> version_id = "10543"
+>> version = JIRA("https://atlassian.org").version(version_id)
+>> print(version.name)
+"some_version_name"
+>> version.update(name="another_name")
+>> print(version.name)
+"another_name"
+>> version.update(archived=True)
+>> print(version.archived)
+True
+class jira.resources.WorkflowScheme(options, session, raw=None)[source]
+Bases: Resource
+
+WorkflowScheme information on a project.
+
+__init__(options, session, raw=None)[source]
+class jira.resources.Role(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A role inside a project.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+update(users: str | list | tuple | None = None, groups: str | list | tuple | None = None)[source]
+Add the specified users or groups to this project role. One of users or groups must be specified.
+
+Parameters:
+users (Optional[Union[str,List,Tuple]]) – a user or users to add to the role
+
+groups (Optional[Union[str,List,Tuple]]) – a group or groups to add to the role
+
+add_user(users: str | list | tuple | None = None, groups: str | list | tuple | None = None)[source]
+Add the specified users or groups to this project role. One of users or groups must be specified.
+
+Parameters:
+users (Optional[Union[str,List,Tuple]]) – a user or users to add to the role
+
+groups (Optional[Union[str,List,Tuple]]) – a group or groups to add to the role
+
+class jira.resources.Resolution(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A resolution for an issue.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.SecurityLevel(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A security level for an issue or project.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.Status(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+Status for an issue.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.User(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None, *, _query_param: str = 'username')[source]
+Bases: Resource
+
+A Jira user.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None, *, _query_param: str = 'username')[source]
+class jira.resources.Group(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A Jira user group.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.CustomFieldOption(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+An existing option for a custom issue field.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.RemoteLink(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A link to a remote application from an issue.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+update(object: dict[str, Any] | None, globalId=None, application=None, relationship=None)[source]
+Update a RemoteLink. ‘object’ is required.
+
+For definitions of the allowable fields for ‘object’ and the keyword arguments ‘globalId’, ‘application’ and ‘relationship’, see https://developer.atlassian.com/display/JIRADEV/JIRA+REST+API+for+Remote+Issue+Links.
+
+Parameters:
+object – the link details to add (see the above link for details)
+
+globalId – unique ID for the link (see the above link for details)
+
+application – application information for the link (see the above link for details)
+
+relationship – relationship description for the link (see the above link for details)
+
+class jira.resources.Customer(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A Service Desk customer.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.ServiceDesk(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A Service Desk.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.RequestType(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A Service Desk Request Type.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.PinnedComment(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+Pinned comment on an issue.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.StatusCategory(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+StatusCategory for an issue.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.AgileResource(path: str, options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+A generic Agile resource. Also known as Jira Agile Server, Jira Software and formerly GreenHopper.
+
+AGILE_BASE_URL = '{server}/rest/{agile_rest_path}/{agile_rest_api_version}/{path}'
+AGILE_BASE_REST_PATH = 'agile'
+Public API introduced in Jira Agile 6.7.7.
+
+__init__(path: str, options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.Sprint(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: AgileResource
+
+An Agile sprint.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.Board(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: AgileResource
+
+An Agile board.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+class jira.resources.Field(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+Bases: Resource
+
+An issue field.
+
+A field cannot be fetched from the Jira API individually, but paginated lists of fields are returned by some endpoints.
+
+__init__(options: dict[str, str], session: ResilientSession, raw: dict[str, Any] | None = None)[source]
+6.1.7. jira.utils module
+Jira utils used internally.
+
+class jira.utils.CaseInsensitiveDict(*args, **kwargs)[source]
+Bases: CaseInsensitiveDict
+
+A case-insensitive dict-like object.
+
+DEPRECATED: use requests.structures.CaseInsensitiveDict directly.
+
+Implements all methods and operations of collections.MutableMapping as well as dict’s copy. Also provides lower_items.
+
+All keys are expected to be strings. The structure remembers the case of the last key to be set, and iter(instance), keys(), items(), iterkeys() will contain case-sensitive keys. However, querying and contains testing is case insensitive:
+
+cid = CaseInsensitiveDict()
+cid['Accept'] = 'application/json'
+cid['accept'] == 'application/json'  # True
+list(cid) == ['Accept']  # True
+For example, headers['content-encoding'] will return the value of a 'Content-Encoding' response header, regardless of how the header name was originally stored.
+
+If the constructor, .update, or equality comparison operations are given keys that have equal .lower() s, the behavior is undefined.
+
+__init__(*args, **kwargs) → None[source]
+jira.utils.threaded_requests(requests)[source]
+jira.utils.json_loads(resp: Response | None) → Any[source]
+Attempts to load json the result of a response.
+
+Parameters:
+resp (Optional[Response]) – The Response object
+
+Raises:
+JIRAError – via jira.resilientsession.raise_on_error()
+
+Returns:
+Union[List[Dict[str, Any]], Dict[str, Any]] – the json
+
+jira.utils.remove_empty_attributes(data: dict[str, Any]) → dict[str, Any][source]
+A convenience function to remove key/value pairs with None for a value.
+
+Parameters:
+data – A dictionary.
+
+Returns:
+Dict[str, Any] – A dictionary with no None key/value pairs.
