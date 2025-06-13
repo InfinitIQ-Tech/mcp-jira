@@ -1,0 +1,89 @@
+name: User Story
+description: Create a user story for new functionality
+title: "[Story]: "
+labels: ["story", "enhancement"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for creating a user story! Please fill out the sections below to help us understand your requirements.
+  - type: textarea
+    id: user-story
+    attributes:
+      label: User Story
+      description: Write your user story in the format "As a [user type], I want [goal] so that [benefit]"
+      placeholder: |
+        As a [user type],
+        I want [goal],
+        so that [benefit].
+    validations:
+      required: true
+  - type: textarea
+    id: background
+    attributes:
+      label: Background
+      description: Provide context and background information for this story
+      placeholder: |
+        Describe the background, context, and any relevant information that helps understand why this story is needed.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Define the specific criteria that must be met for this story to be considered complete
+      placeholder: |
+        - [ ] Criterion 1
+        - [ ] Criterion 2
+        - [ ] Criterion 3
+        
+        Given [initial context]
+        When [action taken]
+        Then [expected result]
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Any additional notes, considerations, or implementation details
+      placeholder: |
+        - Technical considerations
+        - Dependencies
+        - Edge cases to consider
+        - Design considerations
+    validations:
+      required: false
+  - type: textarea
+    id: non-functional-requirements
+    attributes:
+      label: Non-Functional Requirements
+      description: Specify any non-functional requirements such as performance, security, usability, etc.
+      placeholder: |
+        - Performance: [e.g., response time < 2 seconds]
+        - Security: [e.g., authentication required]
+        - Usability: [e.g., accessible via keyboard navigation]
+        - Scalability: [e.g., support up to 1000 concurrent users]
+    validations:
+      required: false
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: What is the priority of this story?
+      options:
+        - Low
+        - Medium
+        - High
+        - Critical
+    validations:
+      required: false
+  - type: input
+    id: story-points
+    attributes:
+      label: Story Points (estimate)
+      description: Estimated complexity/effort for this story
+      placeholder: "e.g., 1, 2, 3, 5, 8, 13"
+    validations:
+      required: false
