@@ -45,6 +45,3 @@ logs
 # OS specific
 .DS_Store
 Thumbs.db
-
-# Test files (temporary)
-test_*.py
