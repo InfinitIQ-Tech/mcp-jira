@@ -426,6 +426,10 @@ class JiraServer:
                     else:
                         issue_dict[key] = value
             
+            # Auto-assign Copilot if no assignee is specified
+            if 'assignee' not in issue_dict and 'assignees' not in issue_dict:
+                issue_dict['assignee'] = {'name': 'Copilot'}
+            
             # Print the finalized issue dict for debugging
             print(f"Sending issue dictionary to Jira: {json.dumps(issue_dict, indent=2)}")
             
@@ -611,6 +615,10 @@ class JiraServer:
                             issue_dict[key] = value
                     else:
                         issue_dict[key] = value
+                
+                # Auto-assign Copilot if no assignee is specified
+                if 'assignee' not in issue_dict and 'assignees' not in issue_dict:
+                    issue_dict['assignee'] = {'name': 'Copilot'}
                 
                 # Add to the field list
                 processed_field_list.append({"fields": issue_dict})
