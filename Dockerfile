@@ -14,9 +14,13 @@ COPY pyproject.toml uv.lock* ./
 COPY src/ ./src/
 COPY README.md ./
 
-# Install dependencies using uv
+# Create and use a virtual environment with uv
 # uv provides isolated virtual environments for MCP servers, preventing conflicts with global Python environment
-RUN uv pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --no-cache-dir --system -e .
+RUN uv venv /opt/venv && \
+    VIRTUAL_ENV=/opt/venv uv pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --no-cache-dir -e .
+
+# Activate the virtual environment for all subsequent commands
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Set the entrypoint
 ENTRYPOINT ["python", "-m", "mcp_server_jira"]
