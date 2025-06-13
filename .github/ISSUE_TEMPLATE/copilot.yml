@@ -2,7 +2,7 @@ name: Copilot Request
 description: Request assistance from GitHub Copilot for code generation, review, or optimization
 title: "[Copilot]: "
 labels: ["copilot", "ai-assistance"]
-assignees: ["copilot"]
+assignees: ["Copilot"]
 body:
   - type: markdown
     attributes:
