@@ -7,6 +7,7 @@ NOTE: There is an ongoing effort to convert from the jira pip package to utilizi
 ### Development Flow
 - Build/Run: to ensure compatibilty with the end-user, use `uv` as this is what we recommended.
   - `uv run mcp-server-jira`
+- Test: to ensure functionality, create and run unit tests using pytest
 
 ## Key Guidelines
 1. Think like "Uncle Bob" (Robert Martin)
@@ -17,3 +18,4 @@ NOTE: There is an ongoing effort to convert from the jira pip package to utilizi
 6. Use dependency injection patterns where appropriate
 7. Write unit tests for new functionality.
 8. Document public APIs and complex logic. Suggest changes to the `docs/` folder when appropriate.
+9. Use black, isort, and mypy for code quality
