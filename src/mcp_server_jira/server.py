@@ -1229,7 +1229,7 @@ async def serve(
                     issueSecurityScheme = arguments.get("issueSecurityScheme")
                     permissionScheme = arguments.get("permissionScheme")
                     projectCategory = arguments.get("projectCategory")
-                    notificationScheme = arguments.get("notificationScheme", None)
+                    notificationScheme = arguments.get("notificationScheme")
                     categoryId = arguments.get("categoryId")
                     url = arguments.get("url", "")  # Default to empty string
                     
