@@ -1,1 +1,0 @@
-mcp instructions are at '/users/kennethdubroff/development/ai/vibe/Claude 3.7/claudemcp/claude instructions/ClaudeMCPReadme'. Follow these explicitly when implementing the server.
