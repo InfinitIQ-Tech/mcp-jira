@@ -17,9 +17,9 @@ class JiraV3APIClient:
     def __init__(
         self,
         server_url: str,
-        username: str = None,
-        password: str = None,
-        token: str = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        token: Optional[str] = None,
     ):
         """Initialize the v3 API client
 
@@ -94,7 +94,8 @@ class JiraV3APIClient:
 
                 raise ValueError(f"HTTP {response.status_code}: {error_details}")
 
-            return response.json()
+            response_data: Dict[str, Any] = response.json()
+            return response_data
 
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Request failed: {str(e)}")
@@ -107,16 +108,16 @@ class JiraV3APIClient:
     def create_project(
         self,
         key: str,
-        name: str = None,
-        assignee: str = None,
+        name: Optional[str] = None,
+        assignee: Optional[str] = None,
         ptype: str = "software",
-        template_name: str = None,
-        avatarId: int = None,
-        issueSecurityScheme: int = None,
-        permissionScheme: int = None,
-        projectCategory: int = None,
-        notificationScheme: int = None,
-        categoryId: int = None,
+        template_name: Optional[str] = None,
+        avatarId: Optional[int] = None,
+        issueSecurityScheme: Optional[int] = None,
+        permissionScheme: Optional[int] = None,
+        projectCategory: Optional[int] = None,
+        notificationScheme: Optional[int] = None,
+        categoryId: Optional[int] = None,
         url: str = "",
     ) -> Dict[str, Any]:
         """Create a project using Jira's v3 REST API
