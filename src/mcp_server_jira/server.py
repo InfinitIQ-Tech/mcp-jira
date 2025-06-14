@@ -839,7 +839,7 @@ class JiraServer:
     def create_jira_project(self, key: str, name: str = None, assignee: str = None, ptype: str = 'software', 
                        template_name: str = None, avatarId: int = None, issueSecurityScheme: int = None, 
                        permissionScheme: int = None, projectCategory: int = None, 
-                       notificationScheme: int = 10000, categoryId: int = None, url: str = '') -> JiraProjectResult:
+                       notificationScheme: int = None, categoryId: int = None, url: str = '') -> JiraProjectResult:
         """Create a project with the specified parameters"""
         if not self.client:
             self.connect()
@@ -1113,7 +1113,7 @@ async def serve(
                         },
                         "notificationScheme": {
                             "type": ["integer", "string"],
-                            "description": "Determines the notification scheme to use. Default is 10000."
+                            "description": "Determines the notification scheme to use. Default is None."
                         },
                         "categoryId": {
                             "type": ["integer", "string"],
@@ -1229,7 +1229,7 @@ async def serve(
                     issueSecurityScheme = arguments.get("issueSecurityScheme")
                     permissionScheme = arguments.get("permissionScheme")
                     projectCategory = arguments.get("projectCategory")
-                    notificationScheme = arguments.get("notificationScheme", 10000)  # Default to 10000
+                    notificationScheme = arguments.get("notificationScheme", None)
                     categoryId = arguments.get("categoryId")
                     url = arguments.get("url", "")  # Default to empty string
                     
