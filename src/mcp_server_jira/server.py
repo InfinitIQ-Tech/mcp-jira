@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import Sequence, Dict, List, Any, Optional, Union
 
+import requests
 from jira import JIRA
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -174,6 +175,75 @@ class JiraServer:
             print(error_msg)
             error_messages.append(error_msg)
             return False
+    
+    def _make_v3_api_request(self, method: str, endpoint: str, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Make an authenticated request to Jira's v3 REST API
+        
+        Args:
+            method: HTTP method (GET, POST, PUT, DELETE)
+            endpoint: API endpoint path (e.g., '/project')
+            data: Optional request body data
+            
+        Returns:
+            Response JSON data
+            
+        Raises:
+            ValueError: If the request fails
+        """
+        if not self.server_url:
+            raise ValueError("Server URL not configured")
+            
+        # Construct the full URL
+        url = f"{self.server_url.rstrip('/')}/rest/api/3{endpoint}"
+        
+        # Prepare headers
+        headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+        
+        # Set up authentication
+        auth = None
+        if self.username and (self.password or self.token):
+            # Use basic auth (works for both username/password and username/token)
+            auth = (self.username, self.password or self.token)
+        elif self.token:
+            # Use bearer token auth
+            headers['Authorization'] = f'Bearer {self.token}'
+        
+        try:
+            response = requests.request(
+                method=method,
+                url=url,
+                headers=headers,
+                auth=auth,
+                json=data,
+                timeout=30
+            )
+            
+            # Check for HTTP errors
+            if response.status_code >= 400:
+                error_details = ""
+                try:
+                    error_json = response.json()
+                    if 'errorMessages' in error_json:
+                        error_details = "; ".join(error_json['errorMessages'])
+                    elif 'message' in error_json:
+                        error_details = error_json['message']
+                except:
+                    error_details = response.text[:200] if response.text else "No error details"
+                
+                raise ValueError(f"HTTP {response.status_code}: {error_details}")
+            
+            return response.json()
+            
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Request failed: {str(e)}")
+        except ValueError:
+            # Re-raise ValueError exceptions (including HTTP errors)
+            raise
+        except Exception as e:
+            raise ValueError(f"Unexpected error in API request: {str(e)}")
 
     def get_jira_projects(self) -> List[JiraProjectResult]:
         """Get all accessible Jira projects
@@ -840,48 +910,116 @@ class JiraServer:
                        template_name: str = None, avatarId: int = None, issueSecurityScheme: int = None, 
                        permissionScheme: int = None, projectCategory: int = None, 
                        notificationScheme: int = None, categoryId: int = None, url: str = '') -> JiraProjectResult:
-        """Create a project with the specified parameters"""
-        if not self.client:
-            self.connect()
+        """Create a project using Jira's v3 REST API
+        
+        Args:
+            key: Project key (required) - must match Jira project key requirements
+            name: Project name (defaults to key if not provided)
+            assignee: Lead account ID or username
+            ptype: Project type key ('software', 'business', 'service_desk')
+            template_name: Project template key for creating from templates
+            avatarId: ID of the avatar to use for the project
+            issueSecurityScheme: ID of the issue security scheme
+            permissionScheme: ID of the permission scheme  
+            projectCategory: ID of the project category
+            notificationScheme: ID of the notification scheme
+            categoryId: Same as projectCategory (alternative parameter)
+            url: URL for project information/documentation
+            
+        Returns:
+            JiraProjectResult with the created project details
+            
+        Note:
+            This method uses Jira's v3 REST API endpoint: POST /rest/api/3/project
+            
+        Example:
+            # Create a basic software project
+            create_jira_project(
+                key='PROJ',
+                name='My Project',
+                ptype='software'
+            )
+            
+            # Create with template
+            create_jira_project(
+                key='BUSI',
+                name='Business Project', 
+                ptype='business',
+                template_name='com.atlassian.jira-core-project-templates:jira-core-simplified-task-tracking'
+            )
+        """
+        if not key:
+            raise ValueError("Project key is required")
             
         try:
-            # Build project parameters, excluding None values for optional parameters
-            project_params = {'key': key}
+            # Build the v3 API request payload
+            payload = {
+                'key': key,
+                'name': name or key
+            }
             
-            # Add optional parameters only if they are not None
-            if name is not None:
-                project_params['name'] = name
-            if assignee is not None:
-                project_params['assignee'] = assignee
-            if ptype is not None:
-                project_params['ptype'] = ptype
-            if template_name is not None:
-                project_params['template_name'] = template_name
+            # Map project type to projectTypeKey
+            if ptype:
+                payload['projectTypeKey'] = ptype
+                
+            # Map template_name to projectTemplateKey  
+            if template_name:
+                payload['projectTemplateKey'] = template_name
+                
+            # Map assignee to leadAccountId
+            if assignee:
+                payload['leadAccountId'] = assignee
+                
+            # Add optional numeric parameters
             if avatarId is not None:
-                project_params['avatarId'] = avatarId
+                payload['avatarId'] = avatarId
             if issueSecurityScheme is not None:
-                project_params['issueSecurityScheme'] = issueSecurityScheme
+                payload['issueSecurityScheme'] = issueSecurityScheme
             if permissionScheme is not None:
-                project_params['permissionScheme'] = permissionScheme
-            if projectCategory is not None:
-                project_params['projectCategory'] = projectCategory
+                payload['permissionScheme'] = permissionScheme
             if notificationScheme is not None:
-                project_params['notificationScheme'] = notificationScheme
+                payload['notificationScheme'] = notificationScheme
+                
+            # Handle categoryId (prefer categoryId over projectCategory for v3 API)
             if categoryId is not None:
-                project_params['categoryId'] = categoryId
-            if url is not None:
-                project_params['url'] = url
+                payload['categoryId'] = categoryId
+            elif projectCategory is not None:
+                payload['categoryId'] = projectCategory
+                
+            # Add URL if provided
+            if url:
+                payload['url'] = url
+                
+            # Set assigneeType to PROJECT_LEAD (v3 API default)
+            payload['assigneeType'] = 'PROJECT_LEAD'
             
-            project_id = self.client.create_project(**project_params)
+            print(f"Creating project with v3 API payload: {json.dumps(payload, indent=2)}")
+            
+            # Make the v3 API request
+            response_data = self._make_v3_api_request('POST', '/project', payload)
+            
+            print(f"Project creation response: {json.dumps(response_data, indent=2)}")
+            
+            # Extract project details from response
+            project_id = response_data.get('id', '0')
+            project_key = response_data.get('key', key)
+            project_self_url = response_data.get('self', '')
+            
+            # For lead information, we would need to make another API call
+            # For now, return None for lead as it's optional in our result model
+            lead = None
             
             return JiraProjectResult(
-                key=key,
+                key=project_key,
                 name=name or key,
-                id=str(project_id) if project_id else "0",
-                lead=None
+                id=str(project_id),
+                lead=lead
             )
+            
         except Exception as e:
-            raise ValueError(f"Error creating project: {str(e)}")
+            error_msg = str(e)
+            print(f"Error creating project with v3 API: {error_msg}")
+            raise ValueError(f"Error creating project: {error_msg}")
 
 
 async def serve(
@@ -1071,7 +1209,7 @@ async def serve(
             ),
             Tool(
                 name=JiraTools.CREATE_PROJECT.value,
-                description="Create a new Jira project",
+                description="Create a new Jira project using v3 REST API",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -1085,15 +1223,15 @@ async def serve(
                         },
                         "assignee": {
                             "type": "string",
-                            "description": "Key of the lead, if not specified it will use current user."
+                            "description": "Lead account ID or username (mapped to leadAccountId in v3 API)."
                         },
                         "ptype": {
                             "type": "string",
-                            "description": "Determines the type of project that should be created. Defaults to 'software'."
+                            "description": "Project type key: 'software', 'business', or 'service_desk'. Defaults to 'software'."
                         },
                         "template_name": {
                             "type": "string",
-                            "description": "Used to create a project based on one of the existing project templates."
+                            "description": "Project template key for creating from templates (mapped to projectTemplateKey in v3 API)."
                         },
                         "avatarId": {
                             "type": ["integer", "string"],
