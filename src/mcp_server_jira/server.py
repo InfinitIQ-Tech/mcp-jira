@@ -845,20 +845,34 @@ class JiraServer:
             self.connect()
             
         try:
-            project_id = self.client.create_project(
-                key=key,
-                name=name,
-                assignee=assignee,
-                ptype=ptype,
-                template_name=template_name,
-                avatarId=avatarId,
-                issueSecurityScheme=issueSecurityScheme,
-                permissionScheme=permissionScheme,
-                projectCategory=projectCategory,
-                notificationScheme=notificationScheme,
-                categoryId=categoryId,
-                url=url
-            )
+            # Build project parameters, excluding None values for optional parameters
+            project_params = {'key': key}
+            
+            # Add optional parameters only if they are not None
+            if name is not None:
+                project_params['name'] = name
+            if assignee is not None:
+                project_params['assignee'] = assignee
+            if ptype is not None:
+                project_params['ptype'] = ptype
+            if template_name is not None:
+                project_params['template_name'] = template_name
+            if avatarId is not None:
+                project_params['avatarId'] = avatarId
+            if issueSecurityScheme is not None:
+                project_params['issueSecurityScheme'] = issueSecurityScheme
+            if permissionScheme is not None:
+                project_params['permissionScheme'] = permissionScheme
+            if projectCategory is not None:
+                project_params['projectCategory'] = projectCategory
+            if notificationScheme is not None:
+                project_params['notificationScheme'] = notificationScheme
+            if categoryId is not None:
+                project_params['categoryId'] = categoryId
+            if url is not None:
+                project_params['url'] = url
+            
+            project_id = self.client.create_project(**project_params)
             
             return JiraProjectResult(
                 key=key,
