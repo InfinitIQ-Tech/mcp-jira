@@ -1,0 +1,101 @@
+name: Copilot Request
+description: Request assistance from GitHub Copilot for code generation, review, or optimization
+title: "[Copilot]: "
+labels: ["copilot", "ai-assistance"]
+assignees: ["copilot"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        🤖 **Copilot Request Template**
+        
+        This issue will be automatically assigned to @copilot for AI-powered assistance. Please provide detailed information about what you need help with.
+  - type: dropdown
+    id: request-type
+    attributes:
+      label: Type of Assistance
+      description: What kind of help do you need from Copilot?
+      options:
+        - Code Generation
+        - Code Review
+        - Bug Investigation
+        - Optimization
+        - Documentation
+        - Testing
+        - Refactoring
+        - Architecture Advice
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe what you need assistance with
+      placeholder: |
+        Provide a clear description of what you need help with. Be as specific as possible.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Provide relevant context, existing code, or background information
+      placeholder: |
+        - Current implementation (if any)
+        - Related files or modules
+        - Constraints or requirements
+        - Previous attempts or approaches tried
+    validations:
+      required: false
+  - type: textarea
+    id: requirements
+    attributes:
+      label: Requirements & Constraints
+      description: Specify any specific requirements, constraints, or preferences
+      placeholder: |
+        - Language/framework preferences
+        - Performance requirements
+        - Coding standards to follow
+        - Compatibility requirements
+        - Security considerations
+    validations:
+      required: false
+  - type: textarea
+    id: expected-outcome
+    attributes:
+      label: Expected Outcome
+      description: What do you expect as the result of this request?
+      placeholder: |
+        Describe what you expect to receive:
+        - Code examples
+        - Recommendations
+        - Analysis
+        - Documentation updates
+        - Test cases
+    validations:
+      required: true
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: Urgency
+      description: How urgent is this request?
+      options:
+        - Low - When time permits
+        - Medium - Within a few days
+        - High - Within 24 hours
+        - Critical - ASAP
+    validations:
+      required: false
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Additional Information
+      description: Any other relevant information, links, or resources
+      placeholder: |
+        - Links to documentation
+        - Related issues or PRs
+        - External resources
+        - Screenshots or diagrams
+    validations:
+      required: false

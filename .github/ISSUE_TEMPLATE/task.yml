@@ -1,0 +1,108 @@
+name: Task
+description: Create a task for work that needs to be done
+title: "[Task]: "
+labels: ["task"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for creating a task! Please provide details about the work that needs to be done.
+  - type: textarea
+    id: user-story
+    attributes:
+      label: User Story (if applicable)
+      description: If this task relates to a user story, write it in the format "As a [user type], I want [goal] so that [benefit]"
+      placeholder: |
+        As a [user type],
+        I want [goal],
+        so that [benefit].
+        
+        (Leave blank if not applicable)
+    validations:
+      required: false
+  - type: textarea
+    id: task-description
+    attributes:
+      label: Task Description
+      description: Describe what needs to be done
+      placeholder: |
+        Provide a clear description of the task to be completed.
+    validations:
+      required: true
+  - type: textarea
+    id: background
+    attributes:
+      label: Background
+      description: Provide context and background information for this task
+      placeholder: |
+        Describe the background, context, and any relevant information that helps understand why this task is needed.
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Define the specific criteria that must be met for this task to be considered complete
+      placeholder: |
+        - [ ] Criterion 1
+        - [ ] Criterion 2
+        - [ ] Criterion 3
+        
+        The task is complete when:
+        - [specific outcome 1]
+        - [specific outcome 2]
+    validations:
+      required: true
+  - type: input
+    id: parent-issue
+    attributes:
+      label: Parent Issue (optional)
+      description: Link to a parent issue if this task is part of a larger story or epic
+      placeholder: "#123 or https://github.com/owner/repo/issues/123"
+    validations:
+      required: false
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Any additional notes, considerations, or implementation details
+      placeholder: |
+        - Technical considerations
+        - Dependencies
+        - Implementation approach
+        - Resources needed
+    validations:
+      required: false
+  - type: textarea
+    id: non-functional-requirements
+    attributes:
+      label: Non-Functional Requirements
+      description: Specify any non-functional requirements such as performance, security, usability, etc.
+      placeholder: |
+        - Performance: [e.g., response time < 2 seconds]
+        - Security: [e.g., authentication required]
+        - Usability: [e.g., accessible via keyboard navigation]
+        - Maintainability: [e.g., code coverage > 80%]
+    validations:
+      required: false
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: What is the priority of this task?
+      options:
+        - Low
+        - Medium
+        - High
+        - Critical
+    validations:
+      required: false
+  - type: input
+    id: effort-estimate
+    attributes:
+      label: Effort Estimate
+      description: Estimated time or complexity for this task
+      placeholder: "e.g., 2 hours, 1 day, 1 week, or story points: 1, 2, 3, 5, 8"
+    validations:
+      required: false
