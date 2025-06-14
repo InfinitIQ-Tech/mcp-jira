@@ -4,11 +4,12 @@ import os
 from pathlib import Path
 from typing import Sequence, Dict, List, Any, Optional, Union
 
-import requests
 from jira import JIRA
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent, ImageContent, EmbeddedResource
+
+from .jira_v3_api import JiraV3APIClient
 
 from pydantic import BaseModel
 try:
@@ -74,6 +75,7 @@ class JiraServer:
         self.password = password
         self.token = token
         self.client = None
+        self._v3_api_client = None
 
     def connect(self):
         """Connect to Jira server using provided authentication details"""
@@ -176,74 +178,16 @@ class JiraServer:
             error_messages.append(error_msg)
             return False
     
-    def _make_v3_api_request(self, method: str, endpoint: str, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Make an authenticated request to Jira's v3 REST API
-        
-        Args:
-            method: HTTP method (GET, POST, PUT, DELETE)
-            endpoint: API endpoint path (e.g., '/project')
-            data: Optional request body data
-            
-        Returns:
-            Response JSON data
-            
-        Raises:
-            ValueError: If the request fails
-        """
-        if not self.server_url:
-            raise ValueError("Server URL not configured")
-            
-        # Construct the full URL
-        url = f"{self.server_url.rstrip('/')}/rest/api/3{endpoint}"
-        
-        # Prepare headers
-        headers = {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-        }
-        
-        # Set up authentication
-        auth = None
-        if self.username and (self.password or self.token):
-            # Use basic auth (works for both username/password and username/token)
-            auth = (self.username, self.password or self.token)
-        elif self.token:
-            # Use bearer token auth
-            headers['Authorization'] = f'Bearer {self.token}'
-        
-        try:
-            response = requests.request(
-                method=method,
-                url=url,
-                headers=headers,
-                auth=auth,
-                json=data,
-                timeout=30
+    def _get_v3_api_client(self) -> JiraV3APIClient:
+        """Get or create a v3 API client instance"""
+        if not self._v3_api_client:
+            self._v3_api_client = JiraV3APIClient(
+                server_url=self.server_url,
+                username=self.username,
+                password=self.password,
+                token=self.token
             )
-            
-            # Check for HTTP errors
-            if response.status_code >= 400:
-                error_details = ""
-                try:
-                    error_json = response.json()
-                    if 'errorMessages' in error_json:
-                        error_details = "; ".join(error_json['errorMessages'])
-                    elif 'message' in error_json:
-                        error_details = error_json['message']
-                except:
-                    error_details = response.text[:200] if response.text else "No error details"
-                
-                raise ValueError(f"HTTP {response.status_code}: {error_details}")
-            
-            return response.json()
-            
-        except requests.exceptions.RequestException as e:
-            raise ValueError(f"Request failed: {str(e)}")
-        except ValueError:
-            # Re-raise ValueError exceptions (including HTTP errors)
-            raise
-        except Exception as e:
-            raise ValueError(f"Unexpected error in API request: {str(e)}")
+        return self._v3_api_client
 
     def get_jira_projects(self) -> List[JiraProjectResult]:
         """Get all accessible Jira projects
@@ -952,58 +896,28 @@ class JiraServer:
             raise ValueError("Project key is required")
             
         try:
-            # Build the v3 API request payload
-            payload = {
-                'key': key,
-                'name': name or key
-            }
+            # Get the v3 API client
+            v3_client = self._get_v3_api_client()
             
-            # Map project type to projectTypeKey
-            if ptype:
-                payload['projectTypeKey'] = ptype
-                
-            # Map template_name to projectTemplateKey  
-            if template_name:
-                payload['projectTemplateKey'] = template_name
-                
-            # Map assignee to leadAccountId
-            if assignee:
-                payload['leadAccountId'] = assignee
-                
-            # Add optional numeric parameters
-            if avatarId is not None:
-                payload['avatarId'] = avatarId
-            if issueSecurityScheme is not None:
-                payload['issueSecurityScheme'] = issueSecurityScheme
-            if permissionScheme is not None:
-                payload['permissionScheme'] = permissionScheme
-            if notificationScheme is not None:
-                payload['notificationScheme'] = notificationScheme
-                
-            # Handle categoryId (prefer categoryId over projectCategory for v3 API)
-            if categoryId is not None:
-                payload['categoryId'] = categoryId
-            elif projectCategory is not None:
-                payload['categoryId'] = projectCategory
-                
-            # Add URL if provided
-            if url:
-                payload['url'] = url
-                
-            # Set assigneeType to PROJECT_LEAD (v3 API default)
-            payload['assigneeType'] = 'PROJECT_LEAD'
-            
-            print(f"Creating project with v3 API payload: {json.dumps(payload, indent=2)}")
-            
-            # Make the v3 API request
-            response_data = self._make_v3_api_request('POST', '/project', payload)
-            
-            print(f"Project creation response: {json.dumps(response_data, indent=2)}")
+            # Create project using v3 API
+            response_data = v3_client.create_project(
+                key=key,
+                name=name,
+                assignee=assignee,
+                ptype=ptype,
+                template_name=template_name,
+                avatarId=avatarId,
+                issueSecurityScheme=issueSecurityScheme,
+                permissionScheme=permissionScheme,
+                projectCategory=projectCategory,
+                notificationScheme=notificationScheme,
+                categoryId=categoryId,
+                url=url
+            )
             
             # Extract project details from response
             project_id = response_data.get('id', '0')
             project_key = response_data.get('key', key)
-            project_self_url = response_data.get('self', '')
             
             # For lead information, we would need to make another API call
             # For now, return None for lead as it's optional in our result model
