@@ -1,11 +1,12 @@
+# pylint: disable=import-error, protected-access
 """
 Tests for the Jira v3 API client functionality.
 """
 
-import json
-from unittest.mock import MagicMock, Mock, patch
 
-import pytest
+from unittest.mock import Mock, patch
+
+import pytest  # pylint: disable=import-error
 
 from src.mcp_server_jira.jira_v3_api import JiraV3APIClient
 
@@ -164,6 +165,17 @@ class TestJiraV3APIClient:
 
         with pytest.raises(ValueError, match="Project key is required"):
             client.create_project(key="")
+
+    def test_create_project_missing_assignee(self):
+        """Test project creation with missing assignee"""
+        client = JiraV3APIClient(
+            server_url="https://test.atlassian.net",
+            username="testuser",
+            token="testtoken",
+        )
+
+        with pytest.raises(ValueError, match="Parameter 'assignee'"):
+            client.create_project(key="TEST")
 
     @patch("src.mcp_server_jira.jira_v3_api.requests.request")
     def test_authentication_username_token(self, mock_request):
