@@ -35,7 +35,7 @@ class JiraV3APIClient:
         self.token = token
 
     def _make_v3_api_request(
-        self, method: str, endpoint: str, data: Optional[Dict[str, Any]] = None
+        self, method: str, endpoint: str, data: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Sends an authenticated HTTP request to a Jira v3 REST API endpoint and returns the parsed JSON response.
@@ -44,6 +44,7 @@ class JiraV3APIClient:
             method: The HTTP method to use (e.g., 'GET', 'POST', 'PUT', 'DELETE').
             endpoint: The Jira v3 API endpoint path (e.g., '/project').
             data: Optional dictionary representing the JSON request body.
+            params: Optional dictionary representing URL query parameters.
         
         Returns:
             The JSON-decoded response from the Jira API.
@@ -76,6 +77,7 @@ class JiraV3APIClient:
                 headers=headers,
                 auth=auth,
                 json=data,
+                params=params,
                 timeout=30,
             )
 
@@ -226,17 +228,11 @@ class JiraV3APIClient:
                 params["recent"] = recent
             if properties:
                 params["properties"] = properties
-            
-            # Build endpoint with query string if params exist
-            endpoint = "/project"
-            if params:
-                query_string = "&".join([f"{k}={v}" for k, v in params.items()])
-                endpoint += f"?{query_string}"
 
-            print(f"Getting projects with v3 API endpoint: {endpoint}")
+            print(f"Getting projects with v3 API params: {params}")
 
-            # Make the v3 API request
-            response_data = self._make_v3_api_request("GET", endpoint)
+            # Make the v3 API request with proper query parameter handling
+            response_data = self._make_v3_api_request("GET", "/project", params=params)
 
             print(f"Projects retrieval response: {json.dumps(response_data, indent=2)}")
 

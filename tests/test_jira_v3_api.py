@@ -264,7 +264,8 @@ class TestJiraV3APIClient:
         # Verify the request was made with correct data
         call_args = mock_request.call_args
         assert call_args[1]["method"] == "GET"
-        assert "/rest/api/3/project?expand=lead" in call_args[1]["url"]
+        assert "/rest/api/3/project" in call_args[1]["url"]
+        assert call_args[1]["params"] == {"expand": "lead"}
 
     @patch("src.mcp_server_jira.jira_v3_api.requests.request")
     def test_get_projects_with_params(self, mock_request):
@@ -285,10 +286,10 @@ class TestJiraV3APIClient:
 
         # Verify the request was made with correct query parameters
         call_args = mock_request.call_args
-        url = call_args[1]["url"]
-        assert "expand=description,lead" in url
-        assert "recent=5" in url
-        assert "properties=key,name" in url
+        params = call_args[1]["params"]
+        assert params["expand"] == "description,lead"
+        assert params["recent"] == 5
+        assert params["properties"] == "key,name"
 
     @patch("src.mcp_server_jira.jira_v3_api.requests.request")
     def test_get_projects_error(self, mock_request):
