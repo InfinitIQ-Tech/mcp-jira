@@ -92,7 +92,7 @@ class JiraV3APIClient:
                         response.text[:200] if response.text else "No error details"
                     )
 
-                raise ValueError(f"HTTP {response.status_code}: {error_details}")
+                raise ValueError(f"HTTP {response.status_code}: {error_details}\nRequest payload: {json.dumps(data)}\nResponse body: {response.text}")
 
             response_data: Dict[str, Any] = response.json()
             return response_data
@@ -110,7 +110,7 @@ class JiraV3APIClient:
         key: str,
         name: Optional[str] = None,
         assignee: Optional[str] = None,
-        ptype: str = "software",
+        ptype: str = None,
         template_name: Optional[str] = None,
         avatarId: Optional[int] = None,
         issueSecurityScheme: Optional[int] = None,
@@ -118,14 +118,14 @@ class JiraV3APIClient:
         projectCategory: Optional[int] = None,
         notificationScheme: Optional[int] = None,
         categoryId: Optional[int] = None,
-        url: str = "",
+        url: str = None,
     ) -> Dict[str, Any]:
         """Create a project using Jira's v3 REST API
 
         Args:
             key: Project key (required) - must match Jira project key requirements
             name: Project name (defaults to key if not provided)
-            assignee: Lead account ID or username
+            assignee: Atlassian accountId of the project lead. Required for all projects when using the v3 REST API; the API always requires `leadAccountId` regardless of default settings or project type.
             ptype: Project type key ('software', 'business', 'service_desk')
             template_name: Project template key for creating from templates
             avatarId: ID of the avatar to use for the project
@@ -140,7 +140,10 @@ class JiraV3APIClient:
             Dict containing the created project details from Jira's response
 
         Note:
-            This method uses Jira's v3 REST API endpoint: POST /rest/api/3/project
+            - Calls POST /rest/api/3/project.
+            - The v3 REST API always requires a valid `leadAccountId` in the payload; default project lead settings or UI behaviors do not bypass this requirement.
+            
+            
 
         Example:
             # Create a basic software project
@@ -166,16 +169,17 @@ class JiraV3APIClient:
             payload = {"key": key, "name": name or key}
 
             # Map project type to projectTypeKey
-            if ptype:
+            if ptype is not None:
                 payload["projectTypeKey"] = ptype
 
             # Map template_name to projectTemplateKey
-            if template_name:
+            if template_name is not None:
                 payload["projectTemplateKey"] = template_name
 
-            # Map assignee to leadAccountId
-            if assignee:
+            # Map assignee to leadAccountId and set assigneeType to PROJECT_LEAD
+            if assignee is not None:
                 payload["leadAccountId"] = assignee
+                payload["assigneeType"] = "PROJECT_LEAD"
 
             # Add optional numeric parameters
             if avatarId is not None:
@@ -193,12 +197,11 @@ class JiraV3APIClient:
             elif projectCategory is not None:
                 payload["categoryId"] = projectCategory
 
-            # Add URL if provided
+            # Add URL if provided (only include when non-empty)
             if url:
                 payload["url"] = url
 
-            # Set assigneeType to PROJECT_LEAD (v3 API default)
-            payload["assigneeType"] = "PROJECT_LEAD"
+
 
             print(
                 f"Creating project with v3 API payload: {json.dumps(payload, indent=2)}"

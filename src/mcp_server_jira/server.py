@@ -4,7 +4,10 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Union
 
-from jira import JIRA
+try:
+    from jira import JIRA
+except ImportError:
+    JIRA = None
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import EmbeddedResource, ImageContent, TextContent, Tool
