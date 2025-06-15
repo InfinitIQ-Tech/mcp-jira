@@ -201,3 +201,100 @@ class JiraV3APIClient:
             error_msg = str(e)
             print(f"Error creating project with v3 API: {error_msg}")
             raise ValueError(f"Error creating project: {error_msg}")
+
+    def get_projects(
+        self,
+        start_at: int = 0,
+        max_results: int = 50,
+        order_by: Optional[str] = None,
+        ids: Optional[list] = None,
+        keys: Optional[list] = None,
+        query: Optional[str] = None,
+        type_key: Optional[str] = None,
+        category_id: Optional[int] = None,
+        action: Optional[str] = None,
+        expand: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Get projects paginated using the v3 REST API.
+        
+        Returns a paginated list of projects visible to the user using the 
+        /rest/api/3/project/search endpoint.
+        
+        Args:
+            start_at: The index of the first item to return (default: 0)
+            max_results: The maximum number of items to return per page (default: 50)
+            order_by: Order the results by a field:
+                     - category: Order by project category
+                     - issueCount: Order by total number of issues
+                     - key: Order by project key  
+                     - lastIssueUpdatedDate: Order by last issue update date
+                     - name: Order by project name
+                     - owner: Order by project lead
+                     - archivedDate: Order by archived date
+                     - deletedDate: Order by deleted date
+            ids: List of project IDs to return
+            keys: List of project keys to return
+            query: Filter projects by query string
+            type_key: Filter projects by type key
+            category_id: Filter projects by category ID
+            action: Filter by action permission (view, browse, edit)
+            expand: Expand additional project fields in response
+            
+        Returns:
+            Dictionary containing the paginated response with projects and pagination info
+            
+        Raises:
+            ValueError: If the API request fails
+        """
+        try:
+            # Build query parameters for the v3 API search endpoint
+            params = {}
+            
+            if start_at > 0:
+                params["startAt"] = start_at
+            if max_results != 50:  # Only include if different from default
+                params["maxResults"] = max_results
+            if order_by:
+                params["orderBy"] = order_by
+            if ids:
+                params["id"] = ids
+            if keys:
+                params["keys"] = keys
+            if query:
+                params["query"] = query
+            if type_key:
+                params["typeKey"] = type_key
+            if category_id is not None:
+                params["categoryId"] = category_id
+            if action:
+                params["action"] = action
+            if expand:
+                params["expand"] = expand
+
+            # Construct endpoint with query parameters
+            endpoint = "/project/search"
+            if params:
+                # Build query string properly handling lists and special characters
+                query_parts = []
+                for k, v in params.items():
+                    if isinstance(v, list):
+                        # Handle list parameters - join with commas
+                        query_parts.append(f"{k}={','.join(map(str, v))}")
+                    else:
+                        query_parts.append(f"{k}={v}")
+                endpoint += f"?{'&'.join(query_parts)}"
+
+            print(f"Fetching projects with v3 API endpoint: {endpoint}")
+
+            # Make the v3 API request
+            response_data = self._make_v3_api_request("GET", endpoint)
+
+            print(f"Projects API response: {json.dumps(response_data, indent=2)}")
+
+            return response_data
+
+        except Exception as e:
+            error_msg = str(e)
+            print(f"Error getting projects with v3 API: {error_msg}")
+            raise ValueError(f"Error getting projects: {error_msg}")

@@ -215,3 +215,110 @@ class TestJiraV3APIClient:
         headers = call_args[1]["headers"]
         assert "Authorization" in headers
         assert headers["Authorization"] == "Bearer testtoken"
+
+    @patch("src.mcp_server_jira.jira_v3_api.requests.request")
+    def test_get_projects_success(self, mock_request):
+        """Test successful get projects request"""
+        # Setup mock response
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "startAt": 0,
+            "maxResults": 50,
+            "total": 2,
+            "isLast": True,
+            "values": [
+                {
+                    "id": "10000",
+                    "key": "TEST",
+                    "name": "Test Project",
+                    "lead": {"displayName": "John Doe"}
+                },
+                {
+                    "id": "10001",
+                    "key": "DEMO", 
+                    "name": "Demo Project",
+                    "lead": {"displayName": "Jane Smith"}
+                }
+            ]
+        }
+        mock_request.return_value = mock_response
+
+        client = JiraV3APIClient(
+            server_url="https://test.atlassian.net",
+            username="testuser",
+            token="testtoken",
+        )
+
+        result = client.get_projects()
+
+        assert result["total"] == 2
+        assert len(result["values"]) == 2
+        assert result["values"][0]["key"] == "TEST"
+        assert result["values"][1]["key"] == "DEMO"
+        mock_request.assert_called_once()
+
+        # Verify the request was made to the correct endpoint
+        call_args = mock_request.call_args
+        assert call_args[1]["method"] == "GET"
+        assert "/rest/api/3/project/search" in call_args[1]["url"]
+
+    @patch("src.mcp_server_jira.jira_v3_api.requests.request")
+    def test_get_projects_with_parameters(self, mock_request):
+        """Test get projects with query parameters"""
+        # Setup mock response
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "startAt": 10,
+            "maxResults": 20,
+            "total": 50,
+            "isLast": False,
+            "values": []
+        }
+        mock_request.return_value = mock_response
+
+        client = JiraV3APIClient(
+            server_url="https://test.atlassian.net",
+            username="testuser",
+            token="testtoken",
+        )
+
+        result = client.get_projects(
+            start_at=10,
+            max_results=20,
+            order_by="name",
+            query="test",
+            keys=["PROJ1", "PROJ2"]
+        )
+
+        assert result["startAt"] == 10
+        assert result["maxResults"] == 20
+        mock_request.assert_called_once()
+
+        # Verify the request URL includes query parameters
+        call_args = mock_request.call_args
+        url = call_args[1]["url"]
+        assert "startAt=10" in url
+        assert "maxResults=20" in url
+        assert "orderBy=name" in url
+        assert "query=test" in url
+        assert "keys=PROJ1,PROJ2" in url
+
+    @patch("src.mcp_server_jira.jira_v3_api.requests.request")
+    def test_get_projects_error(self, mock_request):
+        """Test get projects with error response"""
+        # Setup mock error response
+        mock_response = Mock()
+        mock_response.status_code = 401
+        mock_response.json.return_value = {"errorMessages": ["Unauthorized"]}
+        mock_request.return_value = mock_response
+
+        client = JiraV3APIClient(
+            server_url="https://test.atlassian.net",
+            username="testuser",
+            token="testtoken",
+        )
+
+        with pytest.raises(ValueError, match="HTTP 401"):
+            client.get_projects()

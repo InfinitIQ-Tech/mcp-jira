@@ -26,24 +26,28 @@ class TestJiraServer:
         assert server.username == "testuser"
         assert server.token == "testtoken"
 
-    @patch("src.mcp_server_jira.server.JIRA")
-    def test_get_jira_projects(self, mock_jira_class):
-        """Test getting Jira projects"""
-        # Setup mock
-        mock_jira = Mock()
-        mock_project = Mock()
-        mock_project.key = "TEST"
-        mock_project.name = "Test Project"
-        mock_project.id = "123"
-        mock_project.projectTypeKey = "software"
-
-        # Mock the lead properly
-        mock_lead = Mock()
-        mock_lead.displayName = "John Doe"
-        mock_project.lead = mock_lead
-
-        mock_jira.projects.return_value = [mock_project]
-        mock_jira_class.return_value = mock_jira
+    @patch.object(JiraServer, "_get_v3_api_client")
+    def test_get_jira_projects(self, mock_get_v3_api_client):
+        """Test getting Jira projects using v3 API"""
+        # Setup mock v3 client
+        mock_v3_client = Mock()
+        mock_v3_client.get_projects.return_value = {
+            "startAt": 0,
+            "maxResults": 50,
+            "total": 1,
+            "isLast": True,
+            "values": [
+                {
+                    "id": "123",
+                    "key": "TEST",
+                    "name": "Test Project",
+                    "lead": {
+                        "displayName": "John Doe"
+                    }
+                }
+            ]
+        }
+        mock_get_v3_api_client.return_value = mock_v3_client
 
         server = JiraServer(
             server_url="https://test.atlassian.net",
@@ -60,6 +64,71 @@ class TestJiraServer:
         assert isinstance(projects[0], JiraProjectResult)
         assert projects[0].key == "TEST"
         assert projects[0].name == "Test Project"
+        assert projects[0].id == "123"
+        assert projects[0].lead == "John Doe"
+
+        # Verify v3 client was called correctly
+        mock_v3_client.get_projects.assert_called_with(
+            start_at=0,
+            max_results=50
+        )
+
+    @patch.object(JiraServer, "_get_v3_api_client")
+    def test_get_jira_projects_pagination(self, mock_get_v3_api_client):
+        """Test getting Jira projects with pagination"""
+        # Setup mock v3 client with pagination
+        mock_v3_client = Mock()
+        
+        # First page response
+        page1_response = {
+            "startAt": 0,
+            "maxResults": 2,
+            "total": 3,
+            "isLast": False,
+            "values": [
+                {"id": "10000", "key": "TEST1", "name": "Test Project 1"},
+                {"id": "10001", "key": "TEST2", "name": "Test Project 2"}
+            ]
+        }
+        
+        # Second page response  
+        page2_response = {
+            "startAt": 2,
+            "maxResults": 2,
+            "total": 3,
+            "isLast": True,
+            "values": [
+                {"id": "10002", "key": "TEST3", "name": "Test Project 3"}
+            ]
+        }
+        
+        # Configure mock to return different responses for each call
+        mock_v3_client.get_projects.side_effect = [page1_response, page2_response]
+        mock_get_v3_api_client.return_value = mock_v3_client
+
+        server = JiraServer(
+            server_url="https://test.atlassian.net",
+            auth_method="token",
+            username="testuser",
+            token="testtoken",
+        )
+
+        # Call the method
+        projects = server.get_jira_projects()
+
+        # Should have called get_projects twice due to pagination
+        assert mock_v3_client.get_projects.call_count == 2
+        
+        # Should have collected all 3 projects
+        assert len(projects) == 3
+        assert projects[0].key == "TEST1"
+        assert projects[1].key == "TEST2"
+        assert projects[2].key == "TEST3"
+        
+        # Verify correct pagination parameters
+        calls = mock_v3_client.get_projects.call_args_list
+        assert calls[0][1]["start_at"] == 0
+        assert calls[1][1]["start_at"] == 2
 
     @patch.object(JiraServer, "_get_v3_api_client")
     def test_create_jira_project_v3_api(self, mock_get_v3_api_client):
