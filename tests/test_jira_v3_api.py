@@ -95,7 +95,7 @@ class TestJiraV3APIClient:
         )
 
         result = client.create_project(
-            key="TEST", name="Test Project", ptype="software"
+            key="TEST", name="Test Project", assignee="user123", ptype="software"
         )
 
         assert result["key"] == "TEST"
@@ -164,7 +164,7 @@ class TestJiraV3APIClient:
         )
 
         with pytest.raises(ValueError, match="Project key is required"):
-            client.create_project(key="")
+            client.create_project(key="", assignee="user123")
 
     def test_create_project_missing_assignee(self):
         """Test project creation with missing assignee"""
@@ -174,7 +174,7 @@ class TestJiraV3APIClient:
             token="testtoken",
         )
 
-        with pytest.raises(ValueError, match="Parameter 'assignee'"):
+        with pytest.raises(TypeError, match="missing 1 required positional argument: 'assignee'"):
             client.create_project(key="TEST")
 
     @patch("src.mcp_server_jira.jira_v3_api.requests.request")
@@ -215,3 +215,98 @@ class TestJiraV3APIClient:
         headers = call_args[1]["headers"]
         assert "Authorization" in headers
         assert headers["Authorization"] == "Bearer testtoken"
+
+    @patch("src.mcp_server_jira.jira_v3_api.requests.request")
+    def test_get_projects_success(self, mock_request):
+        """Test successful projects retrieval"""
+        # Setup mock response
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = [
+            {
+                "id": "10000",
+                "key": "TEST",
+                "name": "Test Project",
+                "lead": {
+                    "displayName": "Test User",
+                    "accountId": "test-account-id"
+                },
+                "avatarUrls": {
+                    "16x16": "https://test.atlassian.net/secure/projectavatar?size=xsmall&pid=10000"
+                }
+            },
+            {
+                "id": "10001", 
+                "key": "DEMO",
+                "name": "Demo Project",
+                "lead": {
+                    "displayName": "Demo User",
+                    "accountId": "demo-account-id"
+                }
+            }
+        ]
+        mock_request.return_value = mock_response
+
+        client = JiraV3APIClient(
+            server_url="https://test.atlassian.net",
+            username="testuser",
+            token="testtoken",
+        )
+
+        result = client.get_projects(expand="lead")
+
+        assert len(result) == 2
+        assert result[0]["key"] == "TEST"
+        assert result[0]["name"] == "Test Project"
+        assert result[1]["key"] == "DEMO"
+        assert result[1]["name"] == "Demo Project"
+        
+        # Verify the request was made with correct data
+        call_args = mock_request.call_args
+        assert call_args[1]["method"] == "GET"
+        assert "/rest/api/3/project?expand=lead" in call_args[1]["url"]
+
+    @patch("src.mcp_server_jira.jira_v3_api.requests.request")
+    def test_get_projects_with_params(self, mock_request):
+        """Test projects retrieval with query parameters"""
+        # Setup mock response
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = []
+        mock_request.return_value = mock_response
+
+        client = JiraV3APIClient(
+            server_url="https://test.atlassian.net",
+            username="testuser",
+            token="testtoken",
+        )
+
+        client.get_projects(expand="description,lead", recent=5, properties="key,name")
+
+        # Verify the request was made with correct query parameters
+        call_args = mock_request.call_args
+        url = call_args[1]["url"]
+        assert "expand=description,lead" in url
+        assert "recent=5" in url
+        assert "properties=key,name" in url
+
+    @patch("src.mcp_server_jira.jira_v3_api.requests.request")
+    def test_get_projects_error(self, mock_request):
+        """Test projects retrieval with API error"""
+        # Setup mock error response
+        mock_response = Mock()
+        mock_response.status_code = 403
+        mock_response.json.return_value = {
+            "errorMessages": ["Insufficient permissions"]
+        }
+        mock_response.text = '{"errorMessages": ["Insufficient permissions"]}'
+        mock_request.return_value = mock_response
+
+        client = JiraV3APIClient(
+            server_url="https://test.atlassian.net",
+            username="testuser",
+            token="testtoken",
+        )
+
+        with pytest.raises(ValueError, match="HTTP 403: Insufficient permissions"):
+            client.get_projects()

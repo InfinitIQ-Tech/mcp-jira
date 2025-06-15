@@ -216,7 +216,7 @@ class JiraServer:
         return self._v3_api_client
 
     def get_jira_projects(self) -> List[JiraProjectResult]:
-        """Get all accessible Jira projects
+        """Get all accessible Jira projects using v3 REST API
 
         Returns:
             List of JiraProjectResult objects representing all accessible projects
@@ -224,40 +224,39 @@ class JiraServer:
         Example:
             get_jira_projects()  # Returns list of all projects you have access to
         """
-        if not self.client:
-            if not self.connect():
-                # Connection failed - provide clear error message
-                raise ValueError(
-                    f"Failed to connect to Jira server at {self.server_url}. Check your authentication credentials."
-                )
-
         try:
-            # Get projects from Jira API - projects() takes no parameters according to docs
-            projects = self.client.projects()
+            # Get the v3 API client
+            v3_client = self._get_v3_api_client()
+
+            # Get projects using v3 API with expanded lead information
+            response_data = v3_client.get_projects(expand="lead")
 
             # Process the projects into our result model
             result = []
-            for project in projects:
+            # The v3 API returns an array of project objects
+            for project in response_data:
                 # Extract the project data
                 try:
-                    project_key = project.key
-                    project_name = project.name
-                    project_id = project.id
+                    project_key = project.get("key")
+                    project_name = project.get("name")
+                    project_id = project.get("id")
 
-                    # Handle lead carefully
+                    # Handle lead information from expanded response
                     lead_name = None
-                    if hasattr(project, "lead") and project.lead:
-                        lead_name = getattr(project.lead, "displayName", None)
+                    if "lead" in project and project["lead"]:
+                        lead_name = project["lead"].get("displayName")
 
-                    result.append(
-                        JiraProjectResult(
-                            key=project_key,
-                            name=project_name,
-                            id=str(project_id),  # Ensure id is a string
-                            lead=lead_name,
+                    # Only add projects with required fields
+                    if project_key and project_name and project_id:
+                        result.append(
+                            JiraProjectResult(
+                                key=project_key,
+                                name=project_name,
+                                id=str(project_id),  # Ensure id is a string
+                                lead=lead_name,
+                            )
                         )
-                    )
-                except AttributeError:
+                except (KeyError, TypeError):
                     # Skip projects that don't have required attributes
                     continue
 
@@ -266,7 +265,7 @@ class JiraServer:
             # Log and raise the exception with better details
             error_type = type(e).__name__
             error_msg = str(e)
-            print(f"Error getting projects: {error_type}: {error_msg}")
+            print(f"Error getting projects with v3 API: {error_type}: {error_msg}")
             raise ValueError(f"Failed to get projects: {error_type}: {error_msg}")
 
     def get_jira_issue(self, issue_key: str) -> JiraIssueResult:

@@ -26,24 +26,32 @@ class TestJiraServer:
         assert server.username == "testuser"
         assert server.token == "testtoken"
 
-    @patch("src.mcp_server_jira.server.JIRA")
-    def test_get_jira_projects(self, mock_jira_class):
-        """Test getting Jira projects"""
-        # Setup mock
-        mock_jira = Mock()
-        mock_project = Mock()
-        mock_project.key = "TEST"
-        mock_project.name = "Test Project"
-        mock_project.id = "123"
-        mock_project.projectTypeKey = "software"
-
-        # Mock the lead properly
-        mock_lead = Mock()
-        mock_lead.displayName = "John Doe"
-        mock_project.lead = mock_lead
-
-        mock_jira.projects.return_value = [mock_project]
-        mock_jira_class.return_value = mock_jira
+    @patch.object(JiraServer, "_get_v3_api_client")
+    def test_get_jira_projects_v3_api(self, mock_get_v3_api_client):
+        """Test getting Jira projects using v3 API"""
+        # Setup mock v3 client
+        mock_v3_client = Mock()
+        mock_v3_client.get_projects.return_value = [
+            {
+                "id": "10000",
+                "key": "TEST",
+                "name": "Test Project",
+                "lead": {
+                    "displayName": "John Doe",
+                    "accountId": "john-account-id"
+                }
+            },
+            {
+                "id": "10001",
+                "key": "DEMO", 
+                "name": "Demo Project",
+                "lead": {
+                    "displayName": "Jane Smith",
+                    "accountId": "jane-account-id"
+                }
+            }
+        ]
+        mock_get_v3_api_client.return_value = mock_v3_client
 
         server = JiraServer(
             server_url="https://test.atlassian.net",
@@ -56,10 +64,20 @@ class TestJiraServer:
         projects = server.get_jira_projects()
 
         # Verify results
-        assert len(projects) == 1
+        assert len(projects) == 2
         assert isinstance(projects[0], JiraProjectResult)
         assert projects[0].key == "TEST"
         assert projects[0].name == "Test Project"
+        assert projects[0].id == "10000"
+        assert projects[0].lead == "John Doe"
+        
+        assert projects[1].key == "DEMO"
+        assert projects[1].name == "Demo Project"
+        assert projects[1].id == "10001"
+        assert projects[1].lead == "Jane Smith"
+
+        # Verify v3 client was called correctly
+        mock_v3_client.get_projects.assert_called_once_with(expand="lead")
 
     @patch.object(JiraServer, "_get_v3_api_client")
     def test_create_jira_project_v3_api(self, mock_get_v3_api_client):

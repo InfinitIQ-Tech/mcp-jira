@@ -201,3 +201,48 @@ class JiraV3APIClient:
             error_msg = str(e)
             print(f"Error creating project with v3 API: {error_msg}")
             raise ValueError(f"Error creating project: {error_msg}")
+
+    def get_projects(self, expand: Optional[str] = None, recent: Optional[int] = None, properties: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Retrieves all projects visible to the user using the v3 REST API.
+        
+        Args:
+            expand: Optional comma-separated list of fields to expand (e.g., 'description,lead,url')
+            recent: Optional number of most recently accessed projects to return
+            properties: Optional comma-separated list of project properties to return
+        
+        Returns:
+            A dictionary containing the list of projects returned by Jira.
+        
+        Raises:
+            ValueError: If the request fails or the API returns an error response.
+        """
+        try:
+            # Build query parameters if provided
+            params = {}
+            if expand:
+                params["expand"] = expand
+            if recent is not None:
+                params["recent"] = recent
+            if properties:
+                params["properties"] = properties
+            
+            # Build endpoint with query string if params exist
+            endpoint = "/project"
+            if params:
+                query_string = "&".join([f"{k}={v}" for k, v in params.items()])
+                endpoint += f"?{query_string}"
+
+            print(f"Getting projects with v3 API endpoint: {endpoint}")
+
+            # Make the v3 API request
+            response_data = self._make_v3_api_request("GET", endpoint)
+
+            print(f"Projects retrieval response: {json.dumps(response_data, indent=2)}")
+
+            return response_data
+
+        except Exception as e:
+            error_msg = str(e)
+            print(f"Error getting projects with v3 API: {error_msg}")
+            raise ValueError(f"Error getting projects: {error_msg}")
