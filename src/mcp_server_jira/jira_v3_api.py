@@ -108,8 +108,8 @@ class JiraV3APIClient:
     def create_project(
         self,
         key: str,
+        assignee: str,
         name: Optional[str] = None,
-        assignee: Optional[str] = None,
         ptype: str = None,
         template_name: Optional[str] = None,
         avatarId: Optional[int] = None,
@@ -169,7 +169,7 @@ class JiraV3APIClient:
 
         try:
             # Build the v3 API request payload
-            payload = {"key": key, "name": name or key}
+            payload = {"key": key, "name": name or key, "leadAccountId": assignee, "assigneeType": "PROJECT_LEAD"}
 
             # Map project type to projectTypeKey
             if ptype is not None:
@@ -178,11 +178,6 @@ class JiraV3APIClient:
             # Map template_name to projectTemplateKey
             if template_name is not None:
                 payload["projectTemplateKey"] = template_name
-
-            # Map assignee to leadAccountId and set assigneeType to PROJECT_LEAD
-            if assignee is not None:
-                payload["leadAccountId"] = assignee
-                payload["assigneeType"] = "PROJECT_LEAD"
 
             # Add optional numeric parameters
             if avatarId is not None:
