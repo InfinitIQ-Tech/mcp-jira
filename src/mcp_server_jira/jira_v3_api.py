@@ -37,18 +37,19 @@ class JiraV3APIClient:
     def _make_v3_api_request(
         self, method: str, endpoint: str, data: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Make an authenticated request to Jira's v3 REST API
-
+        """
+        Sends an authenticated HTTP request to a Jira v3 REST API endpoint and returns the parsed JSON response.
+        
         Args:
-            method: HTTP method (GET, POST, PUT, DELETE)
-            endpoint: API endpoint path (e.g., '/project')
-            data: Optional request body data
-
+            method: The HTTP method to use (e.g., 'GET', 'POST', 'PUT', 'DELETE').
+            endpoint: The Jira v3 API endpoint path (e.g., '/project').
+            data: Optional dictionary representing the JSON request body.
+        
         Returns:
-            Response JSON data
-
+            The JSON-decoded response from the Jira API.
+        
         Raises:
-            ValueError: If the request fails
+            ValueError: If the server URL is not configured, the request fails, or the API returns an error response.
         """
         if not self.server_url:
             raise ValueError("Server URL not configured")
@@ -120,46 +121,30 @@ class JiraV3APIClient:
         categoryId: Optional[int] = None,
         url: str = None,
     ) -> Dict[str, Any]:
-        """Create a project using Jira's v3 REST API
-
+        """
+        Creates a new Jira project using the v3 REST API.
+        
+        Requires a project key and the Atlassian accountId of the project lead (`assignee`). The v3 API mandates that `leadAccountId` is always provided, regardless of default project lead settings or UI behavior. Additional project attributes such as name, type, template, avatar, schemes, category, and documentation URL can be specified.
+        
         Args:
-            key: Project key (required) - must match Jira project key requirements
-            name: Project name (defaults to key if not provided)
-            assignee: Atlassian accountId of the project lead. Required for all projects when using the v3 REST API; the API always requires `leadAccountId` regardless of default settings or project type.
-            ptype: Project type key ('software', 'business', 'service_desk')
-            template_name: Project template key for creating from templates
-            avatarId: ID of the avatar to use for the project
-            issueSecurityScheme: ID of the issue security scheme
-            permissionScheme: ID of the permission scheme
-            projectCategory: ID of the project category
-            notificationScheme: ID of the notification scheme
-            categoryId: Same as projectCategory (alternative parameter)
-            url: URL for project information/documentation
-
+            key: The unique project key (required).
+            name: The project name. Defaults to the key if not provided.
+            assignee: Atlassian accountId of the project lead (required by v3 API).
+            ptype: Project type key (e.g., 'software', 'business', 'service_desk').
+            template_name: Project template key for template-based creation.
+            avatarId: ID of the avatar to assign to the project.
+            issueSecurityScheme: ID of the issue security scheme.
+            permissionScheme: ID of the permission scheme.
+            projectCategory: ID of the project category.
+            notificationScheme: ID of the notification scheme.
+            categoryId: Alternative to projectCategory; preferred for v3 API.
+            url: URL for project information or documentation.
+        
         Returns:
-            Dict containing the created project details from Jira's response
-
-        Note:
-            - Calls POST /rest/api/3/project.
-            - The v3 REST API always requires a valid `leadAccountId` in the payload; default project lead settings or UI behaviors do not bypass this requirement.
-            
-            
-
-        Example:
-            # Create a basic software project
-            create_project(
-                key='PROJ',
-                name='My Project',
-                ptype='software'
-            )
-
-            # Create with template
-            create_project(
-                key='BUSI',
-                name='Business Project',
-                ptype='business',
-                template_name='com.atlassian.jira-core-project-templates:jira-core-simplified-task-tracking'
-            )
+            A dictionary containing details of the created project as returned by Jira.
+        
+        Raises:
+            ValueError: If required parameters are missing or project creation fails.
         """
         if not key:
             raise ValueError("Project key is required")
