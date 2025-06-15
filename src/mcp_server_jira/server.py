@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 try:
     from jira import JIRA
 except ImportError:
-    JIRA = None
+    from .jira import JIRA
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import EmbeddedResource, ImageContent, TextContent, Tool
