@@ -164,6 +164,9 @@ class JiraV3APIClient:
         if not key:
             raise ValueError("Project key is required")
 
+        if not assignee:
+            raise ValueError("Parameter 'assignee' (leadAccountId) is required by the Jira v3 API")
+
         try:
             # Build the v3 API request payload
             payload = {"key": key, "name": name or key}
