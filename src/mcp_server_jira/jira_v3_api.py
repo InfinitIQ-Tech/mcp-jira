@@ -369,58 +369,35 @@ class JiraV3APIClient:
         logger.debug(f"Transition response: {response_data}")
         return response_data
 
-    async def get_issue_types(
-        self,
-        project_id_or_key: str,
-        start_at: int = 0,
-        max_results: int = 50,
-    ) -> Dict[str, Any]:
+    async def get_issue_types(self) -> Dict[str, Any]:
         """
-        Get create metadata issue types for a project using the v3 REST API.
+        Get all issue types for user using the v3 REST API.
 
-        Returns a page of issue type metadata for a specified project. Use this 
-        information to populate the requests for creating issues.
-
-        Args:
-            project_id_or_key: Project ID or key (required)
-            start_at: The index of the first item to return (default: 0)
-            max_results: The maximum number of items to return (default: 50)
+        Returns all issue types. This operation can be accessed anonymously.
+        
+        Permissions required: Issue types are only returned as follows:
+        - if the user has the Administer Jira global permission, all issue types are returned.
+        - if the user has the Browse projects project permission for one or more projects, 
+          the issue types associated with the projects the user has permission to browse are returned.
+        - if the user is anonymous then they will be able to access projects with the Browse projects for anonymous users
+        - if the user authentication is incorrect they will fall back to anonymous
 
         Returns:
-            Dictionary containing the paginated response with issue types and pagination info.
-            Structure: {
-                "issueTypes": [
-                    {
-                        "id": "1",
-                        "name": "Bug", 
-                        "description": "An error in the code",
-                        "iconUrl": "...",
-                        "self": "...",
-                        "subtask": false
-                    }
-                ],
-                "maxResults": 50,
-                "startAt": 0,
-                "total": 1
-            }
+            List of issue type dictionaries with fields like:
+            - avatarId: Avatar ID for the issue type
+            - description: Description of the issue type  
+            - hierarchyLevel: Hierarchy level
+            - iconUrl: URL of the issue type icon
+            - id: Issue type ID
+            - name: Issue type name
+            - self: REST API URL for the issue type
+            - subtask: Whether this is a subtask type
 
         Raises:
-            ValueError: If required parameters are missing or the API request fails
+            ValueError: If the API request fails
         """
-        if not project_id_or_key:
-            raise ValueError("project_id_or_key is required")
-
-        params = {
-            "startAt": start_at,
-            "maxResults": max_results,
-        }
-
-        params = {k: v for k, v in params.items() if v is not None}
-
-        endpoint = f"/issue/createmeta/{project_id_or_key}/issuetypes"
-        logger.debug(
-            f"Fetching issue types with v3 API endpoint: {endpoint} with params: {params}"
-        )
-        response_data = await self._make_v3_api_request("GET", endpoint, params=params)
+        endpoint = "/issuetype"
+        logger.debug(f"Fetching issue types with v3 API endpoint: {endpoint}")
+        response_data = await self._make_v3_api_request("GET", endpoint)
         logger.debug(f"Issue types API response: {json.dumps(response_data, indent=2)}")
         return response_data

@@ -1075,23 +1075,24 @@ class JiraServer:
         """Get all available issue types for a specific project using v3 REST API
 
         Args:
-            project_key: The project key (e.g., 'PROJ')
+            project_key: The project key (e.g., 'PROJ') - kept for backward compatibility,
+                        but the new API returns all issue types for the user
 
         Returns:
             List of issue type dictionaries with name, id, and description
 
         Example:
-            get_jira_project_issue_types('PROJ')  # Returns issue types for project with key 'PROJ'
+            get_jira_project_issue_types('PROJ')  # Returns all issue types accessible to user
         """
         logger.info("Starting get_jira_project_issue_types...")
 
         try:
-            # Use v3 API client
+            # Use v3 API client to get all issue types
             v3_client = self._get_v3_api_client()
-            response_data = await v3_client.get_issue_types(project_id_or_key=project_key)
+            response_data = await v3_client.get_issue_types()
 
-            # Extract issue types from response
-            issue_types_data = response_data.get("issueTypes", [])
+            # The new API returns the issue types directly as a list, not wrapped in an object
+            issue_types_data = response_data if isinstance(response_data, list) else response_data.get("issueTypes", [])
 
             # Convert to the expected format maintaining compatibility
             issue_types = []
@@ -1104,11 +1105,11 @@ class JiraServer:
                     }
                 )
 
-            logger.info(f"Found {len(issue_types)} issue types for project {project_key}")
+            logger.info(f"Found {len(issue_types)} issue types (project_key: {project_key})")
             return issue_types
 
         except Exception as e:
-            error_msg = f"Failed to get issue types for project {project_key}: {type(e).__name__}: {str(e)}"
+            error_msg = f"Failed to get issue types: {type(e).__name__}: {str(e)}"
             logger.error(error_msg, exc_info=True)
             print(error_msg)
             raise ValueError(error_msg)
@@ -1581,16 +1582,26 @@ async def serve(
                     raise ValueError(f"Unknown tool: {name}")
 
             logger.debug("Serializing result to JSON...")
-            json_result = json.dumps(
-                (
-                    [r.model_dump() for r in result]
-                    if isinstance(result, list)
-                    else (
-                        result.model_dump() if hasattr(result, "model_dump") else result
-                    )
-                ),
-                indent=2,
-            )
+            
+            # Handle serialization properly for different result types
+            if isinstance(result, list):
+                # If it's a list, check each item individually
+                serialized_result = []
+                for item in result:
+                    if hasattr(item, "model_dump"):
+                        serialized_result.append(item.model_dump())
+                    else:
+                        # It's already a dict or basic type
+                        serialized_result.append(item)
+            else:
+                # Single item result
+                if hasattr(result, "model_dump"):
+                    serialized_result = result.model_dump()
+                else:
+                    # It's already a dict or basic type
+                    serialized_result = result
+                    
+            json_result = json.dumps(serialized_result, indent=2)
             logger.warning("RETURNING HARDCODED DEBUG MESSAGE INSTEAD OF REAL DATA")
             return [TextContent(type="text", text=json_result)]
 
