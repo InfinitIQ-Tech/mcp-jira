@@ -322,3 +322,121 @@ class TestJiraV3APIClient:
 
         with pytest.raises(ValueError, match="HTTP 401"):
             client.get_projects()
+
+    @patch("src.mcp_server_jira.jira_v3_api.httpx.AsyncClient")
+    async def test_get_transitions_success(self, mock_async_client):
+        """Test successful get transitions request"""
+        # Setup mock response
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "transitions": [
+                {
+                    "id": "2",
+                    "name": "Close Issue",
+                    "to": {
+                        "id": "10000",
+                        "name": "Done",
+                        "description": "Issue is done"
+                    },
+                    "hasScreen": False,
+                    "isAvailable": True,
+                    "isConditional": False,
+                    "isGlobal": False,
+                    "isInitial": False
+                },
+                {
+                    "id": "711",
+                    "name": "QA Review",
+                    "to": {
+                        "id": "5",
+                        "name": "In Review",
+                        "description": "Issue is under review"
+                    },
+                    "hasScreen": True,
+                    "isAvailable": True,
+                    "isConditional": False,
+                    "isGlobal": False,
+                    "isInitial": False
+                }
+            ]
+        }
+        mock_response.raise_for_status.return_value = None
+        
+        # Setup mock client
+        mock_client_instance = Mock()
+        mock_client_instance.request.return_value = mock_response
+        mock_async_client.return_value = mock_client_instance
+
+        client = JiraV3APIClient(
+            server_url="https://test.atlassian.net",
+            username="testuser",
+            token="testtoken",
+        )
+
+        result = await client.get_transitions("PROJ-123")
+
+        assert "transitions" in result
+        assert len(result["transitions"]) == 2
+        assert result["transitions"][0]["id"] == "2"
+        assert result["transitions"][0]["name"] == "Close Issue"
+        assert result["transitions"][1]["id"] == "711"
+        assert result["transitions"][1]["name"] == "QA Review"
+        
+        # Verify the request was made with correct parameters
+        mock_client_instance.request.assert_called_once()
+        call_args = mock_client_instance.request.call_args
+        assert call_args[1]["method"] == "GET"
+        assert "/rest/api/3/issue/PROJ-123/transitions" in call_args[1]["url"]
+
+    @patch("src.mcp_server_jira.jira_v3_api.httpx.AsyncClient")
+    async def test_get_transitions_with_parameters(self, mock_async_client):
+        """Test get transitions with query parameters"""
+        # Setup mock response
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"transitions": []}
+        mock_response.raise_for_status.return_value = None
+        
+        # Setup mock client
+        mock_client_instance = Mock()
+        mock_client_instance.request.return_value = mock_response
+        mock_async_client.return_value = mock_client_instance
+
+        client = JiraV3APIClient(
+            server_url="https://test.atlassian.net",
+            username="testuser",
+            token="testtoken",
+        )
+
+        await client.get_transitions(
+            issue_id_or_key="PROJ-123",
+            expand="transitions.fields",
+            transition_id="2",
+            skip_remote_only_condition=True,
+            include_unavailable_transitions=False,
+            sort_by_ops_bar_and_status=True
+        )
+
+        # Verify the request was made with correct parameters
+        mock_client_instance.request.assert_called_once()
+        call_args = mock_client_instance.request.call_args
+        assert call_args[1]["method"] == "GET"
+        
+        params = call_args[1]["params"]
+        assert params["expand"] == "transitions.fields"
+        assert params["transitionId"] == "2"
+        assert params["skipRemoteOnlyCondition"] is True
+        assert params["includeUnavailableTransitions"] is False
+        assert params["sortByOpsBarAndStatus"] is True
+
+    async def test_get_transitions_missing_issue_key(self):
+        """Test get transitions with missing issue key"""
+        client = JiraV3APIClient(
+            server_url="https://test.atlassian.net",
+            username="testuser",
+            token="testtoken",
+        )
+
+        with pytest.raises(ValueError, match="issue_id_or_key is required"):
+            await client.get_transitions("")
