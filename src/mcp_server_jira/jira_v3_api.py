@@ -368,3 +368,36 @@ class JiraV3APIClient:
         response_data = await self._make_v3_api_request("POST", endpoint, data=payload)
         logger.debug(f"Transition response: {response_data}")
         return response_data
+
+    async def get_issue_types(self) -> Dict[str, Any]:
+        """
+        Get all issue types for user using the v3 REST API.
+
+        Returns all issue types. This operation can be accessed anonymously.
+        
+        Permissions required: Issue types are only returned as follows:
+        - if the user has the Administer Jira global permission, all issue types are returned.
+        - if the user has the Browse projects project permission for one or more projects, 
+          the issue types associated with the projects the user has permission to browse are returned.
+        - if the user is anonymous then they will be able to access projects with the Browse projects for anonymous users
+        - if the user authentication is incorrect they will fall back to anonymous
+
+        Returns:
+            List of issue type dictionaries with fields like:
+            - avatarId: Avatar ID for the issue type
+            - description: Description of the issue type  
+            - hierarchyLevel: Hierarchy level
+            - iconUrl: URL of the issue type icon
+            - id: Issue type ID
+            - name: Issue type name
+            - self: REST API URL for the issue type
+            - subtask: Whether this is a subtask type
+
+        Raises:
+            ValueError: If the API request fails
+        """
+        endpoint = "/issuetype"
+        logger.debug(f"Fetching issue types with v3 API endpoint: {endpoint}")
+        response_data = await self._make_v3_api_request("GET", endpoint)
+        logger.debug(f"Issue types API response: {json.dumps(response_data, indent=2)}")
+        return response_data

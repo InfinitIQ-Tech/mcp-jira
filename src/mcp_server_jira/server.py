@@ -632,7 +632,7 @@ class JiraServer:
                             print(
                                 f"Fetching available issue types for project {project_key}..."
                             )
-                            issue_types = self.get_jira_project_issue_types(project_key)
+                            issue_types = asyncio.run(self.get_jira_project_issue_types(project_key))
                             type_names = [t.get("name") for t in issue_types]
                             print(f"Available issue types: {', '.join(type_names)}")
 
@@ -893,9 +893,9 @@ class JiraServer:
                             print(
                                 f"Fetching available issue types for project {project_key}..."
                             )
-                            available_types = self.get_jira_project_issue_types(
+                            available_types = asyncio.run(self.get_jira_project_issue_types(
                                 project_key
-                            )
+                            ))
                             type_names = [t.get("name") for t in available_types]
                             print(f"Available issue types: {', '.join(type_names)}")
 
@@ -1071,69 +1071,48 @@ class JiraServer:
             print(error_msg)
             raise ValueError(error_msg)
 
-    def get_jira_project_issue_types(self, project_key: str) -> List[Dict[str, Any]]:
-        """Get all available issue types for a specific project
+    async def get_jira_project_issue_types(self, project_key: str) -> List[Dict[str, Any]]:
+        """Get all available issue types for a specific project using v3 REST API
 
         Args:
-            project_key: The project key (e.g., 'PROJ')
+            project_key: The project key (e.g., 'PROJ') - kept for backward compatibility,
+                        but the new API returns all issue types for the user
 
         Returns:
             List of issue type dictionaries with name, id, and description
 
         Example:
-            get_jira_project_issue_types('PROJ')  # Returns issue types for project with key 'PROJ'
+            get_jira_project_issue_types('PROJ')  # Returns all issue types accessible to user
         """
-        if not self.client:
-            if not self.connect():
-                raise ValueError(
-                    f"Failed to connect to Jira server at {self.server_url}. Check your authentication credentials."
-                )
+        logger.info("Starting get_jira_project_issue_types...")
 
         try:
-            # First, try the most direct method - using createmeta
-            meta = self.client.createmeta(
-                projectKeys=project_key, expand="projects.issuetypes"
-            )
+            # Use v3 API client to get all issue types
+            v3_client = self._get_v3_api_client()
+            response_data = await v3_client.get_issue_types()
 
-            if "projects" in meta and meta["projects"]:
-                project = meta["projects"][0]
-                if "issuetypes" in project:
-                    issue_types = []
-                    for issuetype in project["issuetypes"]:
-                        issue_types.append(
-                            {
-                                "id": issuetype.get("id"),
-                                "name": issuetype.get("name"),
-                                "description": issuetype.get("description"),
-                            }
-                        )
-                    return issue_types
+            # The new API returns the issue types directly as a list, not wrapped in an object
+            issue_types_data = response_data if isinstance(response_data, list) else response_data.get("issueTypes", [])
 
-            # Fallback: Get all issue types and filter
-            all_issue_types = self.client.issue_types()
-
-            # Create a formatted list of issue types
+            # Convert to the expected format maintaining compatibility
             issue_types = []
-            for issuetype in all_issue_types:
+            for issuetype in issue_types_data:
                 issue_types.append(
                     {
-                        "id": issuetype.id,
-                        "name": issuetype.name,
-                        "description": issuetype.description,
+                        "id": issuetype.get("id"),
+                        "name": issuetype.get("name"),
+                        "description": issuetype.get("description"),
                     }
                 )
 
+            logger.info(f"Found {len(issue_types)} issue types (project_key: {project_key})")
             return issue_types
 
         except Exception as e:
-            error_type = type(e).__name__
-            error_msg = str(e)
-            print(
-                f"Failed to get issue types for project {project_key}: {error_type}: {error_msg}"
-            )
-            raise ValueError(
-                f"Failed to get issue types for project {project_key}: {error_type}: {error_msg}"
-            )
+            error_msg = f"Failed to get issue types: {type(e).__name__}: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            print(error_msg)
+            raise ValueError(error_msg)
 
     async def create_jira_project(
         self,
@@ -1566,14 +1545,14 @@ async def serve(
 
                 case JiraTools.GET_PROJECT_ISSUE_TYPES.value:
                     logger.info(
-                        "Calling synchronous tool get_jira_project_issue_types..."
+                        "Calling asynchronous tool get_jira_project_issue_types..."
                     )
                     project_key = arguments.get("project_key")
                     if not project_key:
                         raise ValueError("Missing required argument: project_key")
-                    result = jira_server.get_jira_project_issue_types(project_key)
+                    result = await jira_server.get_jira_project_issue_types(project_key)
                     logger.info(
-                        "Synchronous tool get_jira_project_issue_types completed."
+                        "Asynchronous tool get_jira_project_issue_types completed."
                     )
 
                 case JiraTools.CREATE_PROJECT.value:
@@ -1603,16 +1582,26 @@ async def serve(
                     raise ValueError(f"Unknown tool: {name}")
 
             logger.debug("Serializing result to JSON...")
-            json_result = json.dumps(
-                (
-                    [r.model_dump() for r in result]
-                    if isinstance(result, list)
-                    else (
-                        result.model_dump() if hasattr(result, "model_dump") else result
-                    )
-                ),
-                indent=2,
-            )
+            
+            # Handle serialization properly for different result types
+            if isinstance(result, list):
+                # If it's a list, check each item individually
+                serialized_result = []
+                for item in result:
+                    if hasattr(item, "model_dump"):
+                        serialized_result.append(item.model_dump())
+                    else:
+                        # It's already a dict or basic type
+                        serialized_result.append(item)
+            else:
+                # Single item result
+                if hasattr(result, "model_dump"):
+                    serialized_result = result.model_dump()
+                else:
+                    # It's already a dict or basic type
+                    serialized_result = result
+                    
+            json_result = json.dumps(serialized_result, indent=2)
             logger.warning("RETURNING HARDCODED DEBUG MESSAGE INSTEAD OF REAL DATA")
             return [TextContent(type="text", text=json_result)]
 
