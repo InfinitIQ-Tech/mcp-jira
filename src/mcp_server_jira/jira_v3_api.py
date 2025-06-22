@@ -6,10 +6,10 @@ offering enhanced functionality and security for operations that require the lat
 """
 
 import json
-from typing import Any, Dict, Optional
-import httpx
-
 import logging
+from typing import Any, Dict, Optional
+
+import httpx
 
 logger = logging.getLogger("JiraMCPLogger")  # Get the same logger instance
 
@@ -75,7 +75,7 @@ class JiraV3APIClient:
             logger.info(
                 f"COMPLETED httpx.client.request for {url}. Status: {response.status_code}"
             )
-            logger.debug(f"Raw response text (first 500 chars): {response.text[:500]}")
+            logger.debug(f"Raw response text (first 500 chars): {str(response.text)[:500]}")
 
             response.raise_for_status()
 
@@ -374,10 +374,10 @@ class JiraV3APIClient:
         Get all issue types for user using the v3 REST API.
 
         Returns all issue types. This operation can be accessed anonymously.
-        
+
         Permissions required: Issue types are only returned as follows:
         - if the user has the Administer Jira global permission, all issue types are returned.
-        - if the user has the Browse projects project permission for one or more projects, 
+        - if the user has the Browse projects project permission for one or more projects,
           the issue types associated with the projects the user has permission to browse are returned.
         - if the user is anonymous then they will be able to access projects with the Browse projects for anonymous users
         - if the user authentication is incorrect they will fall back to anonymous
@@ -385,7 +385,7 @@ class JiraV3APIClient:
         Returns:
             List of issue type dictionaries with fields like:
             - avatarId: Avatar ID for the issue type
-            - description: Description of the issue type  
+            - description: Description of the issue type
             - hierarchyLevel: Hierarchy level
             - iconUrl: URL of the issue type icon
             - id: Issue type ID
@@ -462,4 +462,182 @@ class JiraV3APIClient:
         logger.debug(f"Adding comment to issue {issue_id_or_key} with v3 API endpoint: {endpoint}")
         response_data = await self._make_v3_api_request("POST", endpoint, data=payload)
         logger.debug(f"Add comment API response: {json.dumps(response_data, indent=2)}")
+        return response_data
+
+    async def create_issue(
+        self,
+        fields: Dict[str, Any],
+        update: Optional[Dict[str, Any]] = None,
+        history_metadata: Optional[Dict[str, Any]] = None,
+        properties: Optional[list] = None,
+        transition: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create an issue using the v3 REST API.
+
+        Creates an issue or, where the option to create subtasks is enabled in Jira, a subtask.
+        A transition may be applied, to move the issue or subtask to a workflow step other than
+        the default start step, and issue properties set.
+
+        Args:
+            fields: Dict containing field names and values (required).
+                   Must include project, summary, description, and issuetype.
+            update: Dict containing update operations for fields
+            history_metadata: Optional history metadata for the issue creation
+            properties: Optional list of properties to set
+            transition: Optional transition to apply after creation
+
+        Returns:
+            Dictionary containing the created issue details:
+            - id: Issue ID
+            - key: Issue key
+            - self: URL to the created issue
+            - transition: Transition result if applied
+
+        Raises:
+            ValueError: If required parameters are missing or creation fails
+        """
+        if not fields:
+            raise ValueError("fields is required")
+
+        # Build the request payload
+        payload = {"fields": fields}
+
+        # Add optional parameters
+        if update:
+            payload["update"] = update
+
+        if history_metadata:
+            payload["historyMetadata"] = history_metadata
+
+        if properties:
+            payload["properties"] = properties
+
+        if transition:
+            payload["transition"] = transition
+
+        endpoint = "/issue"
+        logger.debug(f"Creating issue with v3 API endpoint: {endpoint}")
+        logger.debug(f"Create issue payload: {json.dumps(payload, indent=2)}")
+
+        response_data = await self._make_v3_api_request("POST", endpoint, data=payload)
+        logger.debug(f"Create issue response: {response_data}")
+        return response_data
+
+    async def search_issues(
+        self,
+        jql: str,
+        start_at: int = 0,
+        max_results: int = 50,
+        fields: Optional[str] = None,
+        expand: Optional[str] = None,
+        properties: Optional[list] = None,
+        fields_by_keys: Optional[bool] = None,
+        fail_fast: Optional[bool] = None,
+        reconcile_issues: Optional[list] = None,
+    ) -> Dict[str, Any]:
+        """
+        Search for issues using JQL enhanced search (GET) via v3 REST API.
+        
+        Searches for issues using JQL. Recent updates might not be immediately visible 
+        in the returned search results. If you need read-after-write consistency, 
+        you can utilize the reconcileIssues parameter to ensure stronger consistency assurances. 
+        This operation can be accessed anonymously.
+
+        Args:
+            jql: JQL query string
+            start_at: Index of the first issue to return (default: 0)
+            max_results: Maximum number of results to return (default: 50)
+            fields: Comma-separated list of fields to include in response
+            expand: Use expand to include additional information about issues
+            properties: List of issue properties to include in response
+            fields_by_keys: Reference fields by their key (rather than ID)
+            fail_fast: Fail fast when JQL query validation fails
+            reconcile_issues: List of issue IDs to reconcile for read-after-write consistency
+
+        Returns:
+            Dictionary containing search results with:
+            - issues: List of issue dictionaries
+            - isLast: Boolean indicating if this is the last page
+            - startAt: Starting index of results
+            - maxResults: Maximum results per page
+            - total: Total number of issues matching the query
+
+        Raises:
+            ValueError: If the API request fails or JQL is invalid
+        """
+        if not jql:
+            raise ValueError("jql parameter is required")
+
+        # Build query parameters
+        params = {
+            "jql": jql,
+            "startAt": start_at,
+            "maxResults": max_results,
+        }
+
+        # Add optional parameters if provided
+        params["fields"] = fields if fields is not None else "*all"
+        if expand:
+            params["expand"] = expand
+        if properties:
+            params["properties"] = properties
+        if fields_by_keys is not None:
+            params["fieldsByKeys"] = fields_by_keys
+        if fail_fast is not None:
+            params["failFast"] = fail_fast
+        if reconcile_issues:
+            params["reconcileIssues"] = reconcile_issues
+
+        # Remove None values
+        params = {k: v for k, v in params.items() if v is not None}
+
+        endpoint = "/search/jql"
+        logger.debug(f"Searching issues with v3 API endpoint: {endpoint}")
+        logger.debug(f"Search params: {params}")
+        
+        response_data = await self._make_v3_api_request("GET", endpoint, params=params)
+        logger.debug(f"Search issues API response: {json.dumps(response_data, indent=2)}")
+        return response_data
+
+    async def bulk_create_issues(
+        self, 
+        issue_updates: list
+    ) -> Dict[str, Any]:
+        """
+        Bulk create issues using the v3 REST API.
+
+        Creates up to 50 issues and, where the option to create subtasks is enabled in Jira,
+        subtasks. Transitions may be applied, to move the issues or subtasks to a workflow
+        step other than the default start step, and issue properties set.
+
+        Args:
+            issue_updates: List of issue creation specifications. Each item should contain
+                          'fields' dict with issue fields, and optionally 'update' dict
+                          for additional operations during creation.
+
+        Returns:
+            Dict containing:
+            - issues: List of successfully created issues with their details
+            - errors: List of errors for failed issue creations
+
+        Raises:
+            ValueError: If required parameters are missing or bulk creation fails
+        """
+        if not issue_updates:
+            raise ValueError("issue_updates list cannot be empty")
+
+        if len(issue_updates) > 50:
+            raise ValueError("Cannot create more than 50 issues in a single bulk operation")
+
+        # Build the request payload for v3 API
+        payload = {"issueUpdates": issue_updates}
+
+        endpoint = "/issue/bulk"
+        logger.debug(f"Bulk creating issues with v3 API endpoint: {endpoint}")
+        logger.debug(f"Payload: {json.dumps(payload, indent=2)}")
+
+        response_data = await self._make_v3_api_request("POST", endpoint, data=payload)
+        logger.debug(f"Bulk create response: {json.dumps(response_data, indent=2)}")
+
         return response_data
