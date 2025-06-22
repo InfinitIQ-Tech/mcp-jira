@@ -455,8 +455,7 @@ class JiraV3APIClient:
         }
 
         # Add optional parameters if provided
-        if fields:
-            params["fields"] = fields
+        params["fields"] = fields if fields is not None else "*all"
         if expand:
             params["expand"] = expand
         if properties:

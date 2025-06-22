@@ -82,6 +82,13 @@ class JiraIssueResult(BaseModel):
     updated: Optional[str] = None
     fields: Optional[Dict[str, Any]] = None
     comments: Optional[List[Dict[str, Any]]] = None
+    watchers: Optional[Dict[str, Any]] = None
+    attachments: Optional[List[Dict[str, Any]]] = None
+    subtasks: Optional[List[Dict[str, Any]]] = None
+    project: Optional[Dict[str, Any]] = None
+    issue_links: Optional[List[Dict[str, Any]]] = None
+    worklog: Optional[List[Dict[str, Any]]] = None
+    timetracking: Optional[Dict[str, Any]] = None
 
 
 class JiraProjectResult(BaseModel):
@@ -452,41 +459,10 @@ class JiraServer:
                 remaining_needed = max_results - len(all_issues)
                 page_size = min(remaining_needed, 100)
 
-            # Convert to JiraIssueResult objects maintaining compatibility
-            results = []
-            for issue in all_issues:
-                # Extract fields with safe access
-                fields = issue.get("fields", {})
-                
-                # Handle status
-                status = None
-                if "status" in fields and fields["status"]:
-                    status = fields["status"].get("name")
+            # Return raw issues list for full JSON data
+            logger.info(f"Returning raw issues ({len(all_issues)}) for JQL: {jql}")
+            return all_issues
 
-                # Handle assignee
-                assignee = None
-                if "assignee" in fields and fields["assignee"]:
-                    assignee = fields["assignee"].get("displayName")
-
-                # Handle reporter
-                reporter = None
-                if "reporter" in fields and fields["reporter"]:
-                    reporter = fields["reporter"].get("displayName")
-
-                result = JiraIssueResult(
-                    key=issue.get("key", ""),
-                    summary=fields.get("summary", ""),
-                    description=fields.get("description", ""),
-                    status=status,
-                    assignee=assignee,
-                    reporter=reporter,
-                    created=fields.get("created"),
-                    updated=fields.get("updated"),
-                )
-                results.append(result)
-
-            logger.info(f"Found {len(results)} issues for JQL: {jql} across multiple pages")
-            return results
 
         except Exception as e:
             error_msg = f"Failed to search issues: {type(e).__name__}: {str(e)}"
@@ -1642,7 +1618,6 @@ async def serve(
                     serialized_result = result
                     
             json_result = json.dumps(serialized_result, indent=2)
-            logger.warning("RETURNING HARDCODED DEBUG MESSAGE INSTEAD OF REAL DATA")
             return [TextContent(type="text", text=json_result)]
 
         except Exception as e:
