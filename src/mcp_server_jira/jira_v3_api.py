@@ -75,7 +75,7 @@ class JiraV3APIClient:
             logger.info(
                 f"COMPLETED httpx.client.request for {url}. Status: {response.status_code}"
             )
-            logger.debug(f"Raw response text (first 500 chars): {response.text[:500]}")
+            logger.debug(f"Raw response text (first 500 chars): {str(response.text)[:500]}")
 
             response.raise_for_status()
 
