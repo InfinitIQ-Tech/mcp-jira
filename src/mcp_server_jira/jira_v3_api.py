@@ -7,9 +7,10 @@ offering enhanced functionality and security for operations that require the lat
 
 import json
 from typing import Any, Dict, Optional
+import httpx
 
-import requests
-
+import logging
+logger = logging.getLogger("JiraMCPLogger") # Get the same logger instance
 
 class JiraV3APIClient:
     """Client for making direct requests to Jira's v3 REST API"""
@@ -29,84 +30,63 @@ class JiraV3APIClient:
             password: Password for basic auth
             token: API token for auth
         """
-        self.server_url = server_url
+        self.server_url = server_url.rstrip('/')
         self.username = username
-        self.password = password
-        self.token = token
+        self.auth_token = token or password
 
-    def _make_v3_api_request(
-        self, method: str, endpoint: str, data: Optional[Dict[str, Any]] = None
+        if not self.username or not self.auth_token:
+            raise ValueError("Jira username and an API token (or password) are required for v3 API.")
+
+        self.client = httpx.AsyncClient(
+            auth=(self.username, self.auth_token),
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            timeout=30.0,
+            follow_redirects=True,
+        )
+
+    async def _make_v3_api_request(
+        self, method: str, endpoint: str, data: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Sends an authenticated HTTP request to a Jira v3 REST API endpoint and returns the parsed JSON response.
-        
-        Args:
-            method: The HTTP method to use (e.g., 'GET', 'POST', 'PUT', 'DELETE').
-            endpoint: The Jira v3 API endpoint path (e.g., '/project').
-            data: Optional dictionary representing the JSON request body.
-        
-        Returns:
-            The JSON-decoded response from the Jira API.
-        
-        Raises:
-            ValueError: If the server URL is not configured, the request fails, or the API returns an error response.
+        Sends an authenticated async HTTP request to a Jira v3 REST API endpoint.
         """
-        if not self.server_url:
-            raise ValueError("Server URL not configured")
-
-        # Construct the full URL
-        url = f"{self.server_url.rstrip('/')}/rest/api/3{endpoint}"
-
-        # Prepare headers
-        headers = {"Accept": "application/json", "Content-Type": "application/json"}
-
-        # Set up authentication
-        auth = None
-        if self.username and (self.password or self.token):
-            # Use basic auth (works for both username/password and username/token)
-            auth = (self.username, self.password or self.token)
-        elif self.token:
-            # Use bearer token auth
-            headers["Authorization"] = f"Bearer {self.token}"
+        url = f"{self.server_url}/rest/api/3{endpoint}"
+        
+        logger.debug(f"Attempting to make request: {method} {url}")
+        logger.debug(f"Request params: {params}")
+        logger.debug(f"Request JSON data: {data}")
 
         try:
-            response = requests.request(
-                method=method,
+            logger.info(f"AWAITING httpx.client.request for {method} {url}")
+            response = await self.client.request(
+                method=method.upper(),
                 url=url,
-                headers=headers,
-                auth=auth,
                 json=data,
-                timeout=30,
+                params=params,
             )
+            logger.info(f"COMPLETED httpx.client.request for {url}. Status: {response.status_code}")
+            logger.debug(f"Raw response text (first 500 chars): {response.text[:500]}")
 
-            # Check for HTTP errors
-            if response.status_code >= 400:
-                error_details = ""
-                try:
-                    error_json = response.json()
-                    if "errorMessages" in error_json:
-                        error_details = "; ".join(error_json["errorMessages"])
-                    elif "message" in error_json:
-                        error_details = error_json["message"]
-                except:
-                    error_details = (
-                        response.text[:200] if response.text else "No error details"
-                    )
+            response.raise_for_status()
+            
+            if response.status_code == 204:
+                return {}
 
-                raise ValueError(f"HTTP {response.status_code}: {error_details}\nRequest payload: {json.dumps(data)}\nResponse body: {response.text}")
+            return response.json()
 
-            response_data: Dict[str, Any] = response.json()
-            return response_data
-
-        except requests.exceptions.RequestException as e:
-            raise ValueError(f"Request failed: {str(e)}")
-        except ValueError:
-            # Re-raise ValueError exceptions (including HTTP errors)
-            raise
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP Status Error for {e.request.url!r}: {e.response.status_code}", exc_info=True)
+            error_details = f"Jira API returned an error: {e.response.status_code} {e.response.reason_phrase}."
+            raise ValueError(error_details)
+        
+        except httpx.RequestError as e:
+            logger.error(f"Request Error for {e.request.url!r}", exc_info=True)
+            raise ValueError(f"A network error occurred while connecting to Jira: {e}")
         except Exception as e:
-            raise ValueError(f"Unexpected error in API request: {str(e)}")
+            logger.critical("An unexpected error occurred in _make_v3_api_request", exc_info=True)
+            raise
 
-    def create_project(
+    async def create_project(
         self,
         key: str,
         assignee: str,
@@ -152,52 +132,90 @@ class JiraV3APIClient:
         if not assignee:
             raise ValueError("Parameter 'assignee' (leadAccountId) is required by the Jira v3 API")
 
-        try:
-            # Build the v3 API request payload
-            payload = {"key": key, "name": name or key, "leadAccountId": assignee, "assigneeType": "PROJECT_LEAD"}
+        payload = {
+            "key": key,
+            "name": name or key,
+            "leadAccountId": assignee,
+            "assigneeType": "PROJECT_LEAD",
+            "projectTypeKey": ptype,
+            "projectTemplateKey": template_name,
+            "avatarId": avatarId,
+            "issueSecurityScheme": issueSecurityScheme,
+            "permissionScheme": permissionScheme,
+            "notificationScheme": notificationScheme,
+            "categoryId": categoryId or projectCategory,
+            "url": url,
+        }
+        
+        payload = {k: v for k, v in payload.items() if v is not None}
+        
+        print(f"Creating project with v3 API payload: {json.dumps(payload, indent=2)}")
+        response_data = await self._make_v3_api_request("POST", "/project", data=payload)
+        print(f"Project creation response: {json.dumps(response_data, indent=2)}")
+        return response_data
 
-            # Map project type to projectTypeKey
-            if ptype is not None:
-                payload["projectTypeKey"] = ptype
-
-            # Map template_name to projectTemplateKey
-            if template_name is not None:
-                payload["projectTemplateKey"] = template_name
-
-            # Add optional numeric parameters
-            if avatarId is not None:
-                payload["avatarId"] = avatarId
-            if issueSecurityScheme is not None:
-                payload["issueSecurityScheme"] = issueSecurityScheme
-            if permissionScheme is not None:
-                payload["permissionScheme"] = permissionScheme
-            if notificationScheme is not None:
-                payload["notificationScheme"] = notificationScheme
-
-            # Handle categoryId (prefer categoryId over projectCategory for v3 API)
-            if categoryId is not None:
-                payload["categoryId"] = categoryId
-            elif projectCategory is not None:
-                payload["categoryId"] = projectCategory
-
-            # Add URL if provided (only include when non-empty)
-            if url:
-                payload["url"] = url
-
-
-
-            print(
-                f"Creating project with v3 API payload: {json.dumps(payload, indent=2)}"
-            )
-
-            # Make the v3 API request
-            response_data = self._make_v3_api_request("POST", "/project", payload)
-
-            print(f"Project creation response: {json.dumps(response_data, indent=2)}")
-
-            return response_data
-
-        except Exception as e:
-            error_msg = str(e)
-            print(f"Error creating project with v3 API: {error_msg}")
-            raise ValueError(f"Error creating project: {error_msg}")
+    async def get_projects(
+        self,
+        start_at: int = 0,
+        max_results: int = 50,
+        order_by: Optional[str] = None,
+        ids: Optional[list] = None,
+        keys: Optional[list] = None,
+        query: Optional[str] = None,
+        type_key: Optional[str] = None,
+        category_id: Optional[int] = None,
+        action: Optional[str] = None,
+        expand: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Get projects paginated using the v3 REST API.
+        
+        Returns a paginated list of projects visible to the user using the 
+        /rest/api/3/project/search endpoint.
+        
+        Args:
+            start_at: The index of the first item to return (default: 0)
+            max_results: The maximum number of items to return per page (default: 50)
+            order_by: Order the results by a field:
+                     - category: Order by project category
+                     - issueCount: Order by total number of issues
+                     - key: Order by project key  
+                     - lastIssueUpdatedDate: Order by last issue update date
+                     - name: Order by project name
+                     - owner: Order by project lead
+                     - archivedDate: Order by archived date
+                     - deletedDate: Order by deleted date
+            ids: List of project IDs to return
+            keys: List of project keys to return
+            query: Filter projects by query string
+            type_key: Filter projects by type key
+            category_id: Filter projects by category ID
+            action: Filter by action permission (view, browse, edit)
+            expand: Expand additional project fields in response
+            
+        Returns:
+            Dictionary containing the paginated response with projects and pagination info
+            
+        Raises:
+            ValueError: If the API request fails
+        """
+        params = {
+            "startAt": start_at,
+            "maxResults": max_results,
+            "orderBy": order_by,
+            "id": ids,
+            "keys": keys,
+            "query": query,
+            "typeKey": type_key,
+            "categoryId": category_id,
+            "action": action,
+            "expand": expand,
+        }
+        
+        params = {k: v for k, v in params.items() if v is not None}
+        
+        endpoint = "/project/search"
+        print(f"Fetching projects with v3 API endpoint: {endpoint} with params: {params}")
+        response_data = await self._make_v3_api_request("GET", endpoint, params=params)
+        print(f"Projects API response: {json.dumps(response_data, indent=2)}")
+        return response_data

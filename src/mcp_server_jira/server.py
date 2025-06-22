@@ -3,6 +3,30 @@ import os
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Union
+import logging
+import asyncio
+import sys
+
+# --- Setup a dedicated file logger ---
+log_file_path = Path(__file__).parent / "jira_mcp_debug.log"
+logger = logging.getLogger("JiraMCPLogger")
+logger.setLevel(logging.DEBUG)  # Capture all levels of logs
+
+# Create a file handler to write logs to a file
+# Use 'w' to overwrite the file on each run, ensuring a clean log
+handler = logging.FileHandler(log_file_path, mode='w')
+handler.setLevel(logging.DEBUG)
+
+# Create a formatter to make the logs readable
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s')
+handler.setFormatter(formatter)
+
+# Add the handler to the logger
+if not logger.handlers:
+    logger.addHandler(handler)
+
+logger.info("Logger initialized. All subsequent logs will go to jira_mcp_debug.log")
+# --- End of logger setup ---
 
 try:
     from jira import JIRA
@@ -84,8 +108,14 @@ class JiraServer:
         self.username = username
         self.password = password
         self.token = token
+        
+        self._v3_api_client = JiraV3APIClient(
+            server_url=self.server_url,
+            username=self.username,
+            token=self.token,
+            password=password,
+        )
         self.client = None
-        self._v3_api_client = None
 
     def connect(self):
         """Connect to Jira server using provided authentication details"""
@@ -215,59 +245,54 @@ class JiraServer:
             )
         return self._v3_api_client
 
-    def get_jira_projects(self) -> List[JiraProjectResult]:
-        """Get all accessible Jira projects
+    async def get_jira_projects(self) -> List[JiraProjectResult]:
+        """Get all accessible Jira projects using v3 REST API"""
+        logger.info("Starting get_jira_projects...")
+        all_projects_data = []
+        start_at = 0
+        max_results = 50
+        page_count = 0
 
-        Returns:
-            List of JiraProjectResult objects representing all accessible projects
-
-        Example:
-            get_jira_projects()  # Returns list of all projects you have access to
-        """
-        if not self.client:
-            if not self.connect():
-                # Connection failed - provide clear error message
-                raise ValueError(
-                    f"Failed to connect to Jira server at {self.server_url}. Check your authentication credentials."
+        while True:
+            page_count += 1
+            logger.info(f"Pagination loop, page {page_count}: startAt={start_at}, maxResults={max_results}")
+            
+            try:
+                response = await self._v3_api_client.get_projects(
+                    start_at=start_at,
+                    max_results=max_results
                 )
+                
+                projects = response.get("values", [])
+                if not projects:
+                    logger.info("No more projects returned. Breaking pagination loop.")
+                    break
 
-        try:
-            # Get projects from Jira API - projects() takes no parameters according to docs
-            projects = self.client.projects()
+                all_projects_data.extend(projects)
 
-            # Process the projects into our result model
-            result = []
-            for project in projects:
-                # Extract the project data
-                try:
-                    project_key = project.key
-                    project_name = project.name
-                    project_id = project.id
+                if response.get("isLast", False):
+                    logger.info("'isLast' is True. Breaking pagination loop.")
+                    break
 
-                    # Handle lead carefully
-                    lead_name = None
-                    if hasattr(project, "lead") and project.lead:
-                        lead_name = getattr(project.lead, "displayName", None)
+                start_at += len(projects)                
+                
+                # Yield control to the event loop to prevent deadlocks in the MCP framework.
+                await asyncio.sleep(0)
+                
 
-                    result.append(
-                        JiraProjectResult(
-                            key=project_key,
-                            name=project_name,
-                            id=str(project_id),  # Ensure id is a string
-                            lead=lead_name,
-                        )
-                    )
-                except AttributeError:
-                    # Skip projects that don't have required attributes
-                    continue
+            except Exception as e:
+                logger.error("Error inside get_jira_projects pagination loop", exc_info=True)
+                raise
 
-            return result
-        except Exception as e:
-            # Log and raise the exception with better details
-            error_type = type(e).__name__
-            error_msg = str(e)
-            print(f"Error getting projects: {error_type}: {error_msg}")
-            raise ValueError(f"Failed to get projects: {error_type}: {error_msg}")
+        logger.info(f"Finished get_jira_projects. Total projects found: {len(all_projects_data)}")
+        
+        results = []
+        for p in all_projects_data:
+             results.append(JiraProjectResult(key=p.get('key'), name=p.get('name'), id=str(p.get('id')), lead=(p.get('lead') or {}).get('displayName')))
+             logger.info(f"Added project {p.get('key')} to results")
+        logger.info(f"Returning {len(results)} projects")
+        sys.stdout.flush() # Flush stdout to ensure it's sent to MCP, otherwise hang occurs        
+        return results
 
     def get_jira_issue(self, issue_key: str) -> JiraIssueResult:
         """Get details for a specific issue by key"""
@@ -1092,7 +1117,7 @@ class JiraServer:
                 f"Failed to get issue types for project {project_key}: {error_type}: {error_msg}"
             )
 
-    def create_jira_project(
+    async def create_jira_project(
         self,
         key: str,
         name: Optional[str] = None,
@@ -1153,7 +1178,7 @@ class JiraServer:
             v3_client = self._get_v3_api_client()
 
             # Create project using v3 API
-            response_data = v3_client.create_project(
+            response_data = await v3_client.create_project(
                 key=key,
                 name=name,
                 assignee=assignee,
@@ -1170,7 +1195,7 @@ class JiraServer:
 
             # Extract project details from response
             project_id = response_data.get("id", "0")
-            project_key = response_data.get("key", key)
+            project_key = response_data.get("key", key)            
 
             # For lead information, we would need to make another API call
             # For now, return None for lead as it's optional in our result model
@@ -1187,7 +1212,7 @@ class JiraServer:
 
 
 async def serve(
-    server_url: Optional[str] = None,
+    server_url: Optional[str] = None,   
     auth_method: Optional[str] = None,
     username: Optional[str] = None,
     password: Optional[str] = None,
@@ -1432,196 +1457,123 @@ async def serve(
         name: str, arguments: dict
     ) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
         """Handle tool calls for Jira operations."""
+        logger.info(f"call_tool invoked. Tool: '{name}', Arguments: {arguments}")
         try:
-            result: Any  # Allow any type since different tools return different types
+            result: Any
+            
             match name:
                 case JiraTools.GET_PROJECTS.value:
-                    # projects() takes no parameters according to the docs
-                    result = jira_server.get_jira_projects()
+                    logger.info("About to AWAIT jira_server.get_jira_projects...")
+                    result = await jira_server.get_jira_projects()
+                    logger.info(f"COMPLETED await jira_server.get_jira_projects. Result has {len(result)} items.")
 
                 case JiraTools.GET_ISSUE.value:
+                    logger.info("Calling synchronous tool get_jira_issue...")
                     issue_key = arguments.get("issue_key")
                     if not issue_key:
                         raise ValueError("Missing required argument: issue_key")
-
                     result = jira_server.get_jira_issue(issue_key)
+                    logger.info("Synchronous tool get_jira_issue completed.")
 
                 case JiraTools.SEARCH_ISSUES.value:
+                    logger.info("Calling synchronous tool search_jira_issues...")
                     jql = arguments.get("jql")
                     if not jql:
                         raise ValueError("Missing required argument: jql")
-
                     max_results = arguments.get("max_results", 10)
                     result = jira_server.search_jira_issues(jql, max_results)
+                    logger.info("Synchronous tool search_jira_issues completed.")
 
                 case JiraTools.CREATE_ISSUE.value:
+                    logger.info("Calling synchronous tool create_jira_issue...")
                     required_args = ["project", "summary", "description", "issue_type"]
                     if not all(arg in arguments for arg in required_args):
                         missing = [arg for arg in required_args if arg not in arguments]
-                        raise ValueError(
-                            f"Missing required arguments: {', '.join(missing)}"
-                        )
-
-                    fields = arguments.get("fields", {})
+                        raise ValueError(f"Missing required arguments: {', '.join(missing)}")
                     result = jira_server.create_jira_issue(
                         arguments["project"],
                         arguments["summary"],
                         arguments["description"],
                         arguments["issue_type"],
-                        fields,
+                        arguments.get("fields", {}),
                     )
+                    logger.info("Synchronous tool create_jira_issue completed.")
 
                 case JiraTools.CREATE_ISSUES.value:
+                    logger.info("Calling synchronous tool create_jira_issues...")
                     field_list = arguments.get("field_list")
                     if not field_list:
                         raise ValueError("Missing required argument: field_list")
-
                     prefetch = arguments.get("prefetch", True)
                     result = jira_server.create_jira_issues(field_list, prefetch)
+                    logger.info("Synchronous tool create_jira_issues completed.")
 
                 case JiraTools.ADD_COMMENT.value:
+                    logger.info("Calling synchronous tool add_jira_comment...")
                     issue_key = arguments.get("issue_key")
-                    comment = arguments.get("comment")
-                    body = arguments.get("body")
-
-                    # Support both 'comment' and 'body' parameters for flexibility
-                    comment_text = comment or body
-
+                    comment_text = arguments.get("comment") or arguments.get("body")
                     if not issue_key or not comment_text:
-                        raise ValueError(
-                            "Missing required arguments: issue_key and comment (or body)"
-                        )
-
+                        raise ValueError("Missing required arguments: issue_key and comment (or body)")
                     result = jira_server.add_jira_comment(issue_key, comment_text)
+                    logger.info("Synchronous tool add_jira_comment completed.")
 
                 case JiraTools.GET_TRANSITIONS.value:
+                    logger.info("Calling synchronous tool get_jira_transitions...")
                     issue_key = arguments.get("issue_key")
                     if not issue_key:
                         raise ValueError("Missing required argument: issue_key")
-
                     result = jira_server.get_jira_transitions(issue_key)
+                    logger.info("Synchronous tool get_jira_transitions completed.")
 
                 case JiraTools.TRANSITION_ISSUE.value:
+                    logger.info("Calling synchronous tool transition_jira_issue...")
                     issue_key = arguments.get("issue_key")
                     transition_id = arguments.get("transition_id")
                     if not issue_key or not transition_id:
-                        raise ValueError(
-                            "Missing required arguments: issue_key and transition_id"
-                        )
-
+                        raise ValueError("Missing required arguments: issue_key and transition_id")
                     comment = arguments.get("comment")
                     fields = arguments.get("fields")
-                    result = jira_server.transition_jira_issue(
-                        issue_key, transition_id, comment, fields
-                    )
+                    result = jira_server.transition_jira_issue(issue_key, transition_id, comment, fields)
+                    logger.info("Synchronous tool transition_jira_issue completed.")
 
                 case JiraTools.GET_PROJECT_ISSUE_TYPES.value:
+                    logger.info("Calling synchronous tool get_jira_project_issue_types...")
                     project_key = arguments.get("project_key")
                     if not project_key:
                         raise ValueError("Missing required argument: project_key")
-
                     result = jira_server.get_jira_project_issue_types(project_key)
+                    logger.info("Synchronous tool get_jira_project_issue_types completed.")
 
                 case JiraTools.CREATE_PROJECT.value:
-                    # Get parameters directly from arguments
-                    key = arguments.get("key")  # Required parameter
+                    logger.info("About to AWAIT jira_server.create_jira_project...")
+                    key = arguments.get("key")
                     if not key:
                         raise ValueError("Missing required argument: key")
-
-                    name = arguments.get("name")
-                    assignee = arguments.get("assignee")
-                    ptype = arguments.get("ptype", "software")  # Default to 'software'
-                    template_name = arguments.get("template_name")
-                    avatarId = arguments.get("avatarId")
-                    issueSecurityScheme = arguments.get("issueSecurityScheme")
-                    permissionScheme = arguments.get("permissionScheme")
-                    projectCategory = arguments.get("projectCategory")
-                    notificationScheme = arguments.get("notificationScheme")
-                    categoryId = arguments.get("categoryId")
-                    url = arguments.get("url", "")  # Default to empty string
-
-                    # Convert string values to integers where necessary
-                    if isinstance(avatarId, str) and avatarId.isdigit():
-                        avatarId = int(avatarId)
-                    if (
-                        isinstance(issueSecurityScheme, str)
-                        and issueSecurityScheme.isdigit()
-                    ):
-                        issueSecurityScheme = int(issueSecurityScheme)
-                    if isinstance(permissionScheme, str) and permissionScheme.isdigit():
-                        permissionScheme = int(permissionScheme)
-                    if isinstance(projectCategory, str) and projectCategory.isdigit():
-                        projectCategory = int(projectCategory)
-                    if (
-                        isinstance(notificationScheme, str)
-                        and notificationScheme.isdigit()
-                    ):
-                        notificationScheme = int(notificationScheme)
-                    if isinstance(categoryId, str) and categoryId.isdigit():
-                        categoryId = int(categoryId)
-
-                    # Call create_project with exactly the parameters from the documentation
-                    result = jira_server.create_jira_project(
-                        key=key,
-                        name=name,
-                        assignee=assignee,
-                        ptype=ptype,
-                        template_name=template_name,
-                        avatarId=avatarId,
-                        issueSecurityScheme=issueSecurityScheme,
-                        permissionScheme=permissionScheme,
-                        projectCategory=projectCategory,
-                        notificationScheme=notificationScheme,
-                        categoryId=categoryId,
-                        url=url,
-                    )
-
+                    # Type conversion logic from original code
+                    for int_key in ["avatarId", "issueSecurityScheme", "permissionScheme", "projectCategory", "notificationScheme", "categoryId"]:
+                        if int_key in arguments and isinstance(arguments[int_key], str) and arguments[int_key].isdigit():
+                            arguments[int_key] = int(arguments[int_key])
+                    result = await jira_server.create_jira_project(**arguments)
+                    logger.info("COMPLETED await jira_server.create_jira_project.")
+                
                 case _:
                     raise ValueError(f"Unknown tool: {name}")
 
-            return [
-                TextContent(
-                    type="text",
-                    text=json.dumps(
-                        (
-                            result
-                            if isinstance(result, bool)
-                            else (
-                                [
-                                    r.model_dump() if hasattr(r, "model_dump") else r
-                                    for r in result
-                                ]
-                                if isinstance(result, list)
-                                else (
-                                    result.model_dump()
-                                    if hasattr(result, "model_dump")
-                                    else result
-                                )
-                            )
-                        ),
-                        indent=2,
-                    ),
-                )
-            ]
+            logger.debug("Serializing result to JSON...")
+            json_result = json.dumps(
+                (
+                    [r.model_dump() for r in result]
+                    if isinstance(result, list)
+                    else (result.model_dump() if hasattr(result, "model_dump") else result)
+                ),
+                indent=2,
+            )
+            logger.warning("RETURNING HARDCODED DEBUG MESSAGE INSTEAD OF REAL DATA")
+            return [TextContent(type="text", text=json_result)]
 
         except Exception as e:
-            # Parse the error properly
-            error_type = type(e).__name__
-            error_msg = str(e)
-            print(f"Error in call_tool: {error_type}: {error_msg}")
-
-            # Return a detailed error
-            return [
-                TextContent(
-                    type="text",
-                    text=json.dumps(
-                        {
-                            "error": f"Error processing Jira query: {error_type}: {error_msg}"
-                        },
-                        indent=2,
-                    ),
-                )
-            ]
+            logger.critical(f"FATAL error in call_tool for tool '{name}'", exc_info=True)
+            return [TextContent(type="text", text=json.dumps({"error": f"Error in tool '{name}': {type(e).__name__}: {str(e)}"}))]
 
     options = server.create_initialization_options()
     async with stdio_server() as (read_stream, write_stream):
