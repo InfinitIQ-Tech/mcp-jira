@@ -678,10 +678,34 @@ class JiraServer:
 
             raise ValueError(error_msg)
 
-    def create_jira_issues(
+
+
+            # Re-raise the exception with more details
+            if "issuetype" in error_message.lower():
+                raise ValueError(
+                    f"Invalid issue type '{issue_dict.get('issuetype', {}).get('name', 'Unknown')}'. "
+                    + "Use get_jira_project_issue_types(project_key) to get valid types."
+                )
+            raise
+
+            return JiraIssueResult(
+                key=new_issue.key,
+                summary=new_issue.fields.summary,
+                description=new_issue.fields.description,
+                status=(
+                    new_issue.fields.status.name
+                    if hasattr(new_issue.fields, "status")
+                    else None
+                ),
+            )
+        except Exception as e:
+            print(f"Failed to create issue: {type(e).__name__}: {str(e)}")
+            raise ValueError(f"Failed to create issue: {type(e).__name__}: {str(e)}")
+
+    async def create_jira_issues(
         self, field_list: List[Dict[str, Any]], prefetch: bool = True
     ) -> List[Dict[str, Any]]:
-        """Bulk create new Jira issues and return an issue Resource for each successfully created issue.
+        """Bulk create new Jira issues using v3 REST API.
 
         Parameters:
             field_list (List[Dict[str, Any]]): a list of dicts each containing field names and the values to use.
@@ -697,7 +721,7 @@ class JiraServer:
 
         Example:
             # Create multiple issues in bulk
-            create_jira_issues([
+            await create_jira_issues([
                 {
                     'project': 'PROJ',
                     'summary': 'Implement user authentication',
@@ -714,15 +738,10 @@ class JiraServer:
                 }
             ])
         """
-        if not self.client:
-            if not self.connect():
-                # Connection failed - provide clear error message
-                raise ValueError(
-                    f"Failed to connect to Jira server at {self.server_url}. Check your authentication credentials."
-                )
+        logger.info("Starting create_jira_issues...")
 
         try:
-            # Process each field dict to ensure proper formatting
+            # Process each field dict to ensure proper formatting for v3 API
             processed_field_list = []
             for fields in field_list:
                 # Create a properly formatted issue dictionary
@@ -743,9 +762,29 @@ class JiraServer:
                     raise ValueError("Each issue must have a 'summary' field")
                 issue_dict["summary"] = fields["summary"]
 
-                # Description field
+                # Description field - convert to ADF format for v3 API if it's a simple string
                 if "description" in fields:
-                    issue_dict["description"] = fields["description"]
+                    description = fields["description"]
+                    if isinstance(description, str):
+                        # Convert simple string to Atlassian Document Format
+                        issue_dict["description"] = {
+                            "type": "doc",
+                            "version": 1,
+                            "content": [
+                                {
+                                    "type": "paragraph",
+                                    "content": [
+                                        {
+                                            "type": "text",
+                                            "text": description
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    else:
+                        # Assume it's already in ADF format
+                        issue_dict["description"] = description
 
                 # Issue type field - required, handle both 'issuetype' and 'issue_type'
                 issue_type = None
@@ -759,8 +798,7 @@ class JiraServer:
                     )
 
                 # Check for common issue type variants and fix case-sensitivity issues
-                # Add debug information
-                print(
+                logger.debug(
                     f"Processing bulk issue_type: '{issue_type}' (type: {type(issue_type)})"
                 )
                 common_types = [
@@ -785,8 +823,8 @@ class JiraServer:
                         ):
                             issue_type_proper = "New Feature"
 
-                        print(
-                            f"Note: Converting issue type from '{issue_type}' to '{issue_type_proper}'"
+                        logger.debug(
+                            f"Converting issue type from '{issue_type}' to '{issue_type_proper}'"
                         )
                         issue_dict["issuetype"] = {"name": issue_type_proper}
                     else:
@@ -835,149 +873,46 @@ class JiraServer:
                     else:
                         issue_dict[key] = value
 
-                # Add to the field list
+                # Add to the field list in v3 API format
                 processed_field_list.append({"fields": issue_dict})
 
-            # Debug the issue
-            print(f"Processed field list: {json.dumps(processed_field_list, indent=2)}")
+            logger.debug(f"Processed field list: {json.dumps(processed_field_list, indent=2)}")
 
-            # Use the client's create_issues method with the properly formatted fields
-            # The Jira API expects an array of objects, each with a 'fields' property
-            print(
-                f"Sending field list to Jira: {json.dumps(processed_field_list, indent=2)}"
-            )
-
-            try:
-                results = self.client.create_issues(
-                    processed_field_list, prefetch=prefetch
-                )
-            except Exception as e:
-                # If there's an error, log the field list and re-raise
-                error_type = type(e).__name__
-                error_msg = str(e)
-                print(f"Error in create_issues: {error_type}: {error_msg}")
-                print(f"With field list: {json.dumps(processed_field_list, indent=2)}")
-
-                # Check if the error might be related to the issue type
-                if (
-                    "issuetype" in error_msg.lower()
-                    or "issue type" in error_msg.lower()
-                ):
-                    print(
-                        f"Issue type error detected! Your Jira instance may require specific issue types."
-                    )
-
-                    # Try to extract all issue types we attempted to use
-                    issue_types = []
-                    project_key = None
-                    for issue in processed_field_list:
-                        fields = issue.get("fields", {})
-                        if "issuetype" in fields:
-                            issue_type = (
-                                fields["issuetype"].get("name", "Unknown")
-                                if isinstance(fields["issuetype"], dict)
-                                else str(fields["issuetype"])
-                            )
-                            issue_types.append(issue_type)
-
-                        # Get the project key from the first issue
-                        if not project_key and "project" in fields:
-                            if isinstance(fields["project"], dict):
-                                project_key = fields["project"].get("key")
-
-                    print(f"Attempted issue types: {', '.join(issue_types)}")
-                    print(f"Full error: {error_type}: {error_msg}")
-
-                    # Try to fetch available issue types for this project
-                    if project_key:
-                        try:
-                            print(
-                                f"Fetching available issue types for project {project_key}..."
-                            )
-                            available_types = asyncio.run(
-                                self.get_jira_project_issue_types(project_key)
-                            )
-                            type_names = [t.get("name") for t in available_types]
-                            print(f"Available issue types: {', '.join(type_names)}")
-
-                            # Try to find closest matches
-                            for attempted in issue_types:
-                                attempted_lower = attempted.lower()
-                                closest = None
-                                for t in type_names:
-                                    if (
-                                        attempted_lower in t.lower()
-                                        or t.lower() in attempted_lower
-                                    ):
-                                        closest = t
-                                        break
-
-                                if closest:
-                                    print(
-                                        f"The closest match to '{attempted}' is '{closest}'"
-                                    )
-                        except Exception as fetch_error:
-                            print(f"Could not fetch issue types: {str(fetch_error)}")
-
-                    # Raise a more informative error
-                    raise ValueError(
-                        f"Invalid issue type(s): {', '.join(issue_types)}. "
-                        + "Use get_jira_project_issue_types(project_key) to get valid types."
-                    )
-
-                # Try to handle common errors
-                if "project" in str(e).lower():
-                    # Try alternative format
-                    alternative_field_list = []
-                    for issue in processed_field_list:
-                        # Ensure each issue has the project field
-                        fields = issue.get("fields", {})
-                        if "project" not in fields:
-                            raise ValueError(
-                                f"Issue missing 'project' field: {json.dumps(issue)}"
-                            )
-                        alternative_field_list.append(issue)
-
-                    print(
-                        f"Trying alternative format: {json.dumps(alternative_field_list, indent=2)}"
-                    )
-                    results = self.client.create_issues(
-                        alternative_field_list, prefetch=prefetch
-                    )
-                else:
-                    raise
-
-            # Process the results
+            # Use v3 API client
+            v3_client = self._get_v3_api_client()
+            
+            # Call the bulk create API
+            response_data = await v3_client.bulk_create_issues(processed_field_list)
+            
+            # Process the results to maintain compatibility with existing interface
             processed_results = []
-            for result in results:
-                # Determine whether the issue was created successfully
-                if "issue" in result:
-                    issue = result["issue"]
-                    # Extract the issue info
-                    processed_results.append(
-                        {
-                            "key": issue.key,
-                            "id": issue.id,
-                            "self": getattr(issue, "self", None),
-                            "success": True,
-                        }
-                    )
-                else:
-                    # Error case
-                    processed_results.append(
-                        {
-                            "error": result.get("error", "Unknown error"),
-                            "success": False,
-                        }
-                    )
+            
+            # Handle successful issues
+            if "issues" in response_data:
+                for issue in response_data["issues"]:
+                    processed_results.append({
+                        "key": issue.get("key"),
+                        "id": issue.get("id"),
+                        "self": issue.get("self"),
+                        "success": True,
+                    })
+            
+            # Handle errors
+            if "errors" in response_data:
+                for error in response_data["errors"]:
+                    processed_results.append({
+                        "error": error,
+                        "success": False,
+                    })
 
+            logger.info(f"Successfully processed {len(processed_results)} issue creations")
             return processed_results
 
         except Exception as e:
-            print(f"Failed to create issues in bulk: {type(e).__name__}: {str(e)}")
-            raise ValueError(
-                f"Failed to create issues in bulk: {type(e).__name__}: {str(e)}"
-            )
+            error_msg = f"Failed to create issues in bulk: {type(e).__name__}: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            print(error_msg)
+            raise ValueError(error_msg)
 
     def add_jira_comment(self, issue_key: str, comment: str) -> Dict[str, Any]:
         """Add a comment to an issue"""
@@ -1510,13 +1445,13 @@ async def serve(
                     logger.info("COMPLETED await jira_server.create_jira_issue.")
 
                 case JiraTools.CREATE_ISSUES.value:
-                    logger.info("Calling synchronous tool create_jira_issues...")
+                    logger.info("Calling async tool create_jira_issues...")
                     field_list = arguments.get("field_list")
                     if not field_list:
                         raise ValueError("Missing required argument: field_list")
                     prefetch = arguments.get("prefetch", True)
-                    result = jira_server.create_jira_issues(field_list, prefetch)
-                    logger.info("Synchronous tool create_jira_issues completed.")
+                    result = await jira_server.create_jira_issues(field_list, prefetch)
+                    logger.info("Async tool create_jira_issues completed.")
 
                 case JiraTools.ADD_COMMENT.value:
                     logger.info("Calling synchronous tool add_jira_comment...")
