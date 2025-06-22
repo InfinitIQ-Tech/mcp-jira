@@ -401,3 +401,63 @@ class JiraV3APIClient:
         response_data = await self._make_v3_api_request("GET", endpoint)
         logger.debug(f"Issue types API response: {json.dumps(response_data, indent=2)}")
         return response_data
+
+    async def create_issue(
+        self,
+        fields: Dict[str, Any],
+        update: Optional[Dict[str, Any]] = None,
+        history_metadata: Optional[Dict[str, Any]] = None,
+        properties: Optional[list] = None,
+        transition: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create an issue using the v3 REST API.
+
+        Creates an issue or, where the option to create subtasks is enabled in Jira, a subtask.
+        A transition may be applied, to move the issue or subtask to a workflow step other than 
+        the default start step, and issue properties set.
+
+        Args:
+            fields: Dict containing field names and values (required).
+                   Must include project, summary, description, and issuetype.
+            update: Dict containing update operations for fields
+            history_metadata: Optional history metadata for the issue creation
+            properties: Optional list of properties to set
+            transition: Optional transition to apply after creation
+
+        Returns:
+            Dictionary containing the created issue details:
+            - id: Issue ID
+            - key: Issue key 
+            - self: URL to the created issue
+            - transition: Transition result if applied
+
+        Raises:
+            ValueError: If required parameters are missing or creation fails
+        """
+        if not fields:
+            raise ValueError("fields is required")
+
+        # Build the request payload
+        payload = {"fields": fields}
+
+        # Add optional parameters
+        if update:
+            payload["update"] = update
+
+        if history_metadata:
+            payload["historyMetadata"] = history_metadata
+
+        if properties:
+            payload["properties"] = properties
+
+        if transition:
+            payload["transition"] = transition
+
+        endpoint = "/issue"
+        logger.debug(f"Creating issue with v3 API endpoint: {endpoint}")
+        logger.debug(f"Create issue payload: {json.dumps(payload, indent=2)}")
+
+        response_data = await self._make_v3_api_request("POST", endpoint, data=payload)
+        logger.debug(f"Create issue response: {response_data}")
+        return response_data
