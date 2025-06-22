@@ -1,11 +1,11 @@
+import asyncio
 import json
+import logging
 import os
+import sys
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Union
-import logging
-import asyncio
-import sys
 
 # --- Setup a dedicated file logger ---
 log_file_path = Path(__file__).parent / "jira_mcp_debug.log"
@@ -34,10 +34,12 @@ try:
     from jira import JIRA
 except ImportError:
     from .jira import JIRA
+
+from pydantic import BaseModel
+
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import EmbeddedResource, ImageContent, TextContent, Tool
-from pydantic import BaseModel
 
 from .jira_v3_api import JiraV3APIClient
 
@@ -82,6 +84,13 @@ class JiraIssueResult(BaseModel):
     updated: Optional[str] = None
     fields: Optional[Dict[str, Any]] = None
     comments: Optional[List[Dict[str, Any]]] = None
+    watchers: Optional[Dict[str, Any]] = None
+    attachments: Optional[List[Dict[str, Any]]] = None
+    subtasks: Optional[List[Dict[str, Any]]] = None
+    project: Optional[Dict[str, Any]] = None
+    issue_links: Optional[List[Dict[str, Any]]] = None
+    worklog: Optional[List[Dict[str, Any]]] = None
+    timetracking: Optional[Dict[str, Any]] = None
 
 
 class JiraProjectResult(BaseModel):
@@ -403,58 +412,67 @@ class JiraServer:
                 f"Failed to get issue {issue_key}: {type(e).__name__}: {str(e)}"
             )
 
-    def search_jira_issues(
+    async def search_jira_issues(
         self, jql: str, max_results: int = 10
     ) -> List[JiraIssueResult]:
-        """Search for issues using JQL"""
-        if not self.client:
-            if not self.connect():
-                # Connection failed - provide clear error message
-                raise ValueError(
-                    f"Failed to connect to Jira server at {self.server_url}. Check your authentication credentials."
-                )
+        """Search for issues using JQL via v3 REST API with pagination support"""
+        logger.info("Starting search_jira_issues...")
 
         try:
-            issues = self.client.search_issues(jql, maxResults=max_results)
-
-            return [
-                JiraIssueResult(
-                    key=issue.key,
-                    summary=issue.fields.summary,
-                    description=issue.fields.description,
-                    status=(
-                        issue.fields.status.name
-                        if hasattr(issue.fields, "status")
-                        else None
-                    ),
-                    assignee=(
-                        issue.fields.assignee.displayName
-                        if hasattr(issue.fields, "assignee") and issue.fields.assignee
-                        else None
-                    ),
-                    reporter=(
-                        issue.fields.reporter.displayName
-                        if hasattr(issue.fields, "reporter") and issue.fields.reporter
-                        else None
-                    ),
-                    created=(
-                        issue.fields.created
-                        if hasattr(issue.fields, "created")
-                        else None
-                    ),
-                    updated=(
-                        issue.fields.updated
-                        if hasattr(issue.fields, "updated")
-                        else None
-                    ),
+            # Use v3 API client
+            v3_client = self._get_v3_api_client()
+            
+            # Collect all issues from all pages
+            all_issues = []
+            start_at = 0
+            page_size = min(max_results, 100)  # Jira typically limits to 100 per page
+            
+            while True:
+                logger.debug(f"Fetching page starting at {start_at} with page size {page_size}")
+                response_data = await v3_client.search_issues(
+                    jql=jql, 
+                    start_at=start_at,
+                    max_results=page_size
                 )
-                for issue in issues
-            ]
-        except Exception as e:
-            print(f"Failed to search issues: {type(e).__name__}: {str(e)}")
-            raise ValueError(f"Failed to search issues: {type(e).__name__}: {str(e)}")
 
-    def create_jira_issue(
+                # Extract issues from current page
+                page_issues = response_data.get("issues", [])
+                all_issues.extend(page_issues)
+                
+                logger.debug(f"Retrieved {len(page_issues)} issues from current page. Total so far: {len(all_issues)}")
+
+                # Check if we've reached the user's max_results limit
+                if len(all_issues) >= max_results:
+                    # Trim to exact max_results if we exceeded it
+                    all_issues = all_issues[:max_results]
+                    logger.debug(f"Reached max_results limit of {max_results}, stopping pagination")
+                    break
+
+                # Check if this is the last page according to API
+                is_last = response_data.get("isLast", True)
+                if is_last:
+                    logger.debug("API indicates this is the last page, stopping pagination")
+                    break
+
+                # If we have more pages, prepare for next iteration
+                start_at = len(all_issues)  # Use actual number of issues retrieved so far
+                
+                # Adjust page size for next request to not exceed max_results
+                remaining_needed = max_results - len(all_issues)
+                page_size = min(remaining_needed, 100)
+
+            # Return raw issues list for full JSON data
+            logger.info(f"Returning raw issues ({len(all_issues)}) for JQL: {jql}")
+            return all_issues
+
+
+        except Exception as e:
+            error_msg = f"Failed to search issues: {type(e).__name__}: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            print(error_msg)
+            raise ValueError(error_msg)
+
+    async def create_jira_issue(
         self,
         project: str,
         summary: str,
@@ -462,7 +480,7 @@ class JiraServer:
         issue_type: str,
         fields: Optional[Dict[str, Any]] = None,
     ) -> JiraIssueResult:
-        """Create a new Jira issue
+        """Create a new Jira issue using v3 REST API
 
         Args:
             project: Project key (e.g., 'PROJ')
@@ -477,7 +495,7 @@ class JiraServer:
 
         Example:
             # Create a bug
-            create_jira_issue(
+            await create_jira_issue(
                 project='PROJ',
                 summary='Login button not working',
                 description='The login button on the homepage is not responding to clicks',
@@ -485,7 +503,7 @@ class JiraServer:
             )
 
             # Create a task with custom fields
-            create_jira_issue(
+            await create_jira_issue(
                 project='PROJ',
                 summary='Update documentation',
                 description='Update API documentation with new endpoints',
@@ -497,12 +515,7 @@ class JiraServer:
                 }
             )
         """
-        if not self.client:
-            if not self.connect():
-                # Connection failed - provide clear error message
-                raise ValueError(
-                    f"Failed to connect to Jira server at {self.server_url}. Check your authentication credentials."
-                )
+        logger.info("Starting create_jira_issue...")
 
         try:
             # Create a properly formatted issue dictionary
@@ -523,8 +536,9 @@ class JiraServer:
                 issue_dict["description"] = description
 
             # Issue type - required, with validation for common issue types
-            # Add for better debugging - print available types
-            print(f"Processing issue_type: '{issue_type}' (type: {type(issue_type)})")
+            logger.info(
+                f"Processing issue_type: '{issue_type}' (type: {type(issue_type)})"
+            )
             common_types = [
                 "bug",
                 "task",
@@ -548,7 +562,7 @@ class JiraServer:
                     ):
                         issue_type_proper = "New Feature"
 
-                    print(
+                    logger.info(
                         f"Note: Converting issue type from '{issue_type}' to '{issue_type_proper}'"
                     )
                     issue_dict["issuetype"] = {"name": issue_type_proper}
@@ -599,53 +613,70 @@ class JiraServer:
                     else:
                         issue_dict[key] = value
 
-            # Print the finalized issue dict for debugging
-            print(
-                f"Sending issue dictionary to Jira: {json.dumps(issue_dict, indent=2)}"
+            # Use v3 API client
+            v3_client = self._get_v3_api_client()
+            response_data = await v3_client.create_issue(fields=issue_dict)
+
+            # Extract issue details from v3 API response
+            issue_key = response_data.get("key")
+            issue_id = response_data.get("id")
+
+            logger.info(f"Successfully created issue {issue_key} (ID: {issue_id})")
+
+            # Return JiraIssueResult with the created issue details
+            # For v3 API, we return what we have from the create response
+            return JiraIssueResult(
+                key=issue_key,
+                summary=summary,  # Use the summary we provided
+                description=description,  # Use the description we provided
+                status="Open",  # Default status for new issues
             )
 
-            # Use the client's create_issue method with the properly formatted fields dict
-            try:
-                new_issue = self.client.create_issue(fields=issue_dict)
-            except Exception as e:
-                error_type = type(e).__name__
-                error_message = str(e)
+        except Exception as e:
+            error_msg = f"Failed to create issue: {type(e).__name__}: {str(e)}"
+            logger.error(error_msg, exc_info=True)
 
-                # Check if the error might be related to the issue type
-                if (
-                    "issuetype" in error_message.lower()
-                    or "issue type" in error_message.lower()
-                ):
-                    print(
-                        f"Issue type error detected! Your Jira instance may require specific issue types."
+            # Enhanced error handling for issue type errors
+            if "issuetype" in str(e).lower() or "issue type" in str(e).lower():
+                logger.info(
+                    "Issue type error detected, trying to provide helpful suggestions..."
+                )
+                try:
+                    project_key = (
+                        project if isinstance(project, str) else project.get("key")
                     )
-                    attempted_type = issue_dict.get("issuetype", {}).get(
-                        "name", "Unknown"
-                    )
-                    print(f"Attempted issue type: '{attempted_type}'")
-                    print(f"Full error: {error_type}: {error_message}")
+                    if project_key:
+                        issue_types = await self.get_jira_project_issue_types(
+                            project_key
+                        )
+                        type_names = [t.get("name") for t in issue_types]
+                        logger.info(
+                            f"Available issue types for project {project_key}: {', '.join(type_names)}"
+                        )
 
-                    # Try to fetch available issue types for this project
-                    try:
-                        project_key = issue_dict.get("project", {}).get("key")
-                        if project_key:
-                            print(
-                                f"Fetching available issue types for project {project_key}..."
+                        # Try to find the closest match
+                        attempted_type = issue_type
+                        closest = None
+                        attempted_lower = attempted_type.lower()
+                        for t in type_names:
+                            if (
+                                attempted_lower in t.lower()
+                                or t.lower() in attempted_lower
+                            ):
+                                closest = t
+                                break
+
+                        if closest:
+                            logger.info(
+                                f"The closest match to '{attempted_type}' is '{closest}'"
                             )
-                            issue_types = asyncio.run(self.get_jira_project_issue_types(project_key))
-                            type_names = [t.get("name") for t in issue_types]
-                            print(f"Available issue types: {', '.join(type_names)}")
+                            error_msg += f" Available types: {', '.join(type_names)}. Closest match: '{closest}'"
+                        else:
+                            error_msg += f" Available types: {', '.join(type_names)}"
+                except Exception as fetch_error:
+                    logger.error(f"Could not fetch issue types: {str(fetch_error)}")
 
-                            # Try to find the closest match
-                            closest = None
-                            attempted_lower = attempted_type.lower()
-                            for t in type_names:
-                                if (
-                                    attempted_lower in t.lower()
-                                    or t.lower() in attempted_lower
-                                ):
-                                    closest = t
-                                    break
+            raise ValueError(error_msg)
 
                             if closest:
                                 print(
@@ -982,7 +1013,9 @@ class JiraServer:
             print(error_msg)
             raise ValueError(error_msg)
 
-    async def get_jira_project_issue_types(self, project_key: str) -> List[Dict[str, Any]]:
+    async def get_jira_project_issue_types(
+        self, project_key: str
+    ) -> List[Dict[str, Any]]:
         """Get all available issue types for a specific project using v3 REST API
 
         Args:
@@ -1003,7 +1036,11 @@ class JiraServer:
             response_data = await v3_client.get_issue_types()
 
             # The new API returns the issue types directly as a list, not wrapped in an object
-            issue_types_data = response_data if isinstance(response_data, list) else response_data.get("issueTypes", [])
+            issue_types_data = (
+                response_data
+                if isinstance(response_data, list)
+                else response_data.get("issueTypes", [])
+            )
 
             # Convert to the expected format maintaining compatibility
             issue_types = []
@@ -1016,7 +1053,9 @@ class JiraServer:
                     }
                 )
 
-            logger.info(f"Found {len(issue_types)} issue types (project_key: {project_key})")
+            logger.info(
+                f"Found {len(issue_types)} issue types (project_key: {project_key})"
+            )
             return issue_types
 
         except Exception as e:
@@ -1386,30 +1425,30 @@ async def serve(
                     logger.info("Synchronous tool get_jira_issue completed.")
 
                 case JiraTools.SEARCH_ISSUES.value:
-                    logger.info("Calling synchronous tool search_jira_issues...")
+                    logger.info("Calling async tool search_jira_issues...")
                     jql = arguments.get("jql")
                     if not jql:
                         raise ValueError("Missing required argument: jql")
                     max_results = arguments.get("max_results", 10)
-                    result = jira_server.search_jira_issues(jql, max_results)
-                    logger.info("Synchronous tool search_jira_issues completed.")
+                    result = await jira_server.search_jira_issues(jql, max_results)
+                    logger.info("Async tool search_jira_issues completed.")
 
                 case JiraTools.CREATE_ISSUE.value:
-                    logger.info("Calling synchronous tool create_jira_issue...")
+                    logger.info("About to AWAIT jira_server.create_jira_issue...")
                     required_args = ["project", "summary", "description", "issue_type"]
                     if not all(arg in arguments for arg in required_args):
                         missing = [arg for arg in required_args if arg not in arguments]
                         raise ValueError(
                             f"Missing required arguments: {', '.join(missing)}"
                         )
-                    result = jira_server.create_jira_issue(
+                    result = await jira_server.create_jira_issue(
                         arguments["project"],
                         arguments["summary"],
                         arguments["description"],
                         arguments["issue_type"],
                         arguments.get("fields", {}),
                     )
-                    logger.info("Synchronous tool create_jira_issue completed.")
+                    logger.info("COMPLETED await jira_server.create_jira_issue.")
 
                 case JiraTools.CREATE_ISSUES.value:
                     logger.info("Calling async tool create_jira_issues...")
@@ -1493,7 +1532,7 @@ async def serve(
                     raise ValueError(f"Unknown tool: {name}")
 
             logger.debug("Serializing result to JSON...")
-            
+
             # Handle serialization properly for different result types
             if isinstance(result, list):
                 # If it's a list, check each item individually
@@ -1511,9 +1550,8 @@ async def serve(
                 else:
                     # It's already a dict or basic type
                     serialized_result = result
-                    
+
             json_result = json.dumps(serialized_result, indent=2)
-            logger.warning("RETURNING HARDCODED DEBUG MESSAGE INSTEAD OF REAL DATA")
             return [TextContent(type="text", text=json_result)]
 
         except Exception as e:
