@@ -678,21 +678,15 @@ class JiraServer:
 
             raise ValueError(error_msg)
 
-                            if closest:
-                                print(
-                                    f"The closest match to '{attempted_type}' is '{closest}'"
-                                )
-                                print(f"Try using '{closest}' instead")
-                    except Exception as fetch_error:
-                        print(f"Could not fetch issue types: {str(fetch_error)}")
 
-                # Re-raise the exception with more details
-                if "issuetype" in error_message.lower():
-                    raise ValueError(
-                        f"Invalid issue type '{issue_dict.get('issuetype', {}).get('name', 'Unknown')}'. "
-                        + "Use get_jira_project_issue_types(project_key) to get valid types."
-                    )
-                raise
+
+            # Re-raise the exception with more details
+            if "issuetype" in error_message.lower():
+                raise ValueError(
+                    f"Invalid issue type '{issue_dict.get('issuetype', {}).get('name', 'Unknown')}'. "
+                    + "Use get_jira_project_issue_types(project_key) to get valid types."
+                )
+            raise
 
             return JiraIssueResult(
                 key=new_issue.key,
