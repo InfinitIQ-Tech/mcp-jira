@@ -75,7 +75,7 @@ class JiraV3APIClient:
             logger.info(
                 f"COMPLETED httpx.client.request for {url}. Status: {response.status_code}"
             )
-            logger.debug(f"Raw response text (first 500 chars): {response.text[:500]}")
+            logger.debug(f"Raw response text (first 500 chars): {str(response.text)[:500]}")
 
             response.raise_for_status()
 
@@ -460,4 +460,80 @@ class JiraV3APIClient:
 
         response_data = await self._make_v3_api_request("POST", endpoint, data=payload)
         logger.debug(f"Create issue response: {response_data}")
+        return response_data
+
+    async def search_issues(
+        self,
+        jql: str,
+        start_at: int = 0,
+        max_results: int = 50,
+        fields: Optional[str] = None,
+        expand: Optional[str] = None,
+        properties: Optional[list] = None,
+        fields_by_keys: Optional[bool] = None,
+        fail_fast: Optional[bool] = None,
+        reconcile_issues: Optional[list] = None,
+    ) -> Dict[str, Any]:
+        """
+        Search for issues using JQL enhanced search (GET) via v3 REST API.
+        
+        Searches for issues using JQL. Recent updates might not be immediately visible 
+        in the returned search results. If you need read-after-write consistency, 
+        you can utilize the reconcileIssues parameter to ensure stronger consistency assurances. 
+        This operation can be accessed anonymously.
+
+        Args:
+            jql: JQL query string
+            start_at: Index of the first issue to return (default: 0)
+            max_results: Maximum number of results to return (default: 50)
+            fields: Comma-separated list of fields to include in response
+            expand: Use expand to include additional information about issues
+            properties: List of issue properties to include in response
+            fields_by_keys: Reference fields by their key (rather than ID)
+            fail_fast: Fail fast when JQL query validation fails
+            reconcile_issues: List of issue IDs to reconcile for read-after-write consistency
+
+        Returns:
+            Dictionary containing search results with:
+            - issues: List of issue dictionaries
+            - isLast: Boolean indicating if this is the last page
+            - startAt: Starting index of results
+            - maxResults: Maximum results per page
+            - total: Total number of issues matching the query
+
+        Raises:
+            ValueError: If the API request fails or JQL is invalid
+        """
+        if not jql:
+            raise ValueError("jql parameter is required")
+
+        # Build query parameters
+        params = {
+            "jql": jql,
+            "startAt": start_at,
+            "maxResults": max_results,
+        }
+
+        # Add optional parameters if provided
+        params["fields"] = fields if fields is not None else "*all"
+        if expand:
+            params["expand"] = expand
+        if properties:
+            params["properties"] = properties
+        if fields_by_keys is not None:
+            params["fieldsByKeys"] = fields_by_keys
+        if fail_fast is not None:
+            params["failFast"] = fail_fast
+        if reconcile_issues:
+            params["reconcileIssues"] = reconcile_issues
+
+        # Remove None values
+        params = {k: v for k, v in params.items() if v is not None}
+
+        endpoint = "/search/jql"
+        logger.debug(f"Searching issues with v3 API endpoint: {endpoint}")
+        logger.debug(f"Search params: {params}")
+        
+        response_data = await self._make_v3_api_request("GET", endpoint, params=params)
+        logger.debug(f"Search issues API response: {json.dumps(response_data, indent=2)}")
         return response_data
