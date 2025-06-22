@@ -978,38 +978,43 @@ class JiraServer:
                 f"Failed to create issues in bulk: {type(e).__name__}: {str(e)}"
             )
 
-    def add_jira_comment(self, issue_key: str, comment: str) -> Dict[str, Any]:
-        """Add a comment to an issue"""
-        if not self.client:
-            if not self.connect():
-                # Connection failed - provide clear error message
-                raise ValueError(
-                    f"Failed to connect to Jira server at {self.server_url}. Check your authentication credentials."
-                )
+    async def add_jira_comment(self, issue_key: str, comment: str) -> Dict[str, Any]:
+        """Add a comment to an issue using v3 REST API"""
+        logger.info("Starting add_jira_comment...")
 
         try:
-            comment_result = self.client.add_comment(issue_key, comment)
+            # Use v3 API client
+            v3_client = self._get_v3_api_client()
+            comment_result = await v3_client.add_comment(
+                issue_id_or_key=issue_key,
+                comment=comment,
+            )
 
-            # Return a plain dictionary that doesn't need model_dump
-            return {
-                "id": comment_result.id,
-                "body": comment_result.body,
-                "author": (
-                    getattr(
-                        comment_result.author, "displayName", str(comment_result.author)
-                    )
-                    if hasattr(comment_result, "author")
-                    else "Unknown"
-                ),
-                "created": str(
-                    comment_result.created
-                ),  # Convert to string to ensure JSON serializable
+            # Extract useful information from the v3 API response
+            response_data = {
+                "id": comment_result.get("id"),
+                "body": comment_result.get("body", {}),
+                "created": comment_result.get("created"),
+                "updated": comment_result.get("updated"),
             }
+
+            # Extract author information if available
+            if "author" in comment_result:
+                author = comment_result["author"]
+                response_data["author"] = author.get("displayName", "Unknown")
+            else:
+                response_data["author"] = "Unknown"
+
+            logger.info(f"Successfully added comment to issue {issue_key}")
+            return response_data
+
         except Exception as e:
-            print(f"Failed to add comment to {issue_key}: {type(e).__name__}: {str(e)}")
-            raise ValueError(
+            error_msg = (
                 f"Failed to add comment to {issue_key}: {type(e).__name__}: {str(e)}"
             )
+            logger.error(error_msg, exc_info=True)
+            print(error_msg)
+            raise ValueError(error_msg)
 
     async def get_jira_transitions(self, issue_key: str) -> List[JiraTransitionResult]:
         """Get available transitions for an issue using v3 REST API"""
@@ -1510,15 +1515,15 @@ async def serve(
                     logger.info("Synchronous tool create_jira_issues completed.")
 
                 case JiraTools.ADD_COMMENT.value:
-                    logger.info("Calling synchronous tool add_jira_comment...")
+                    logger.info("About to AWAIT jira_server.add_jira_comment...")
                     issue_key = arguments.get("issue_key")
                     comment_text = arguments.get("comment") or arguments.get("body")
                     if not issue_key or not comment_text:
                         raise ValueError(
                             "Missing required arguments: issue_key and comment (or body)"
                         )
-                    result = jira_server.add_jira_comment(issue_key, comment_text)
-                    logger.info("Synchronous tool add_jira_comment completed.")
+                    result = await jira_server.add_jira_comment(issue_key, comment_text)
+                    logger.info("COMPLETED await jira_server.add_jira_comment.")
 
                 case JiraTools.GET_TRANSITIONS.value:
                     logger.info("About to AWAIT jira_server.get_jira_transitions...")
