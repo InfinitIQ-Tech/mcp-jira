@@ -6,10 +6,10 @@ offering enhanced functionality and security for operations that require the lat
 """
 
 import json
-from typing import Any, Dict, Optional
-import httpx
-
 import logging
+from typing import Any, Dict, Optional
+
+import httpx
 
 logger = logging.getLogger("JiraMCPLogger")  # Get the same logger instance
 
@@ -374,10 +374,10 @@ class JiraV3APIClient:
         Get all issue types for user using the v3 REST API.
 
         Returns all issue types. This operation can be accessed anonymously.
-        
+
         Permissions required: Issue types are only returned as follows:
         - if the user has the Administer Jira global permission, all issue types are returned.
-        - if the user has the Browse projects project permission for one or more projects, 
+        - if the user has the Browse projects project permission for one or more projects,
           the issue types associated with the projects the user has permission to browse are returned.
         - if the user is anonymous then they will be able to access projects with the Browse projects for anonymous users
         - if the user authentication is incorrect they will fall back to anonymous
@@ -385,7 +385,7 @@ class JiraV3APIClient:
         Returns:
             List of issue type dictionaries with fields like:
             - avatarId: Avatar ID for the issue type
-            - description: Description of the issue type  
+            - description: Description of the issue type
             - hierarchyLevel: Hierarchy level
             - iconUrl: URL of the issue type icon
             - id: Issue type ID
@@ -400,6 +400,66 @@ class JiraV3APIClient:
         logger.debug(f"Fetching issue types with v3 API endpoint: {endpoint}")
         response_data = await self._make_v3_api_request("GET", endpoint)
         logger.debug(f"Issue types API response: {json.dumps(response_data, indent=2)}")
+        return response_data
+
+    async def create_issue(
+        self,
+        fields: Dict[str, Any],
+        update: Optional[Dict[str, Any]] = None,
+        history_metadata: Optional[Dict[str, Any]] = None,
+        properties: Optional[list] = None,
+        transition: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create an issue using the v3 REST API.
+
+        Creates an issue or, where the option to create subtasks is enabled in Jira, a subtask.
+        A transition may be applied, to move the issue or subtask to a workflow step other than
+        the default start step, and issue properties set.
+
+        Args:
+            fields: Dict containing field names and values (required).
+                   Must include project, summary, description, and issuetype.
+            update: Dict containing update operations for fields
+            history_metadata: Optional history metadata for the issue creation
+            properties: Optional list of properties to set
+            transition: Optional transition to apply after creation
+
+        Returns:
+            Dictionary containing the created issue details:
+            - id: Issue ID
+            - key: Issue key
+            - self: URL to the created issue
+            - transition: Transition result if applied
+
+        Raises:
+            ValueError: If required parameters are missing or creation fails
+        """
+        if not fields:
+            raise ValueError("fields is required")
+
+        # Build the request payload
+        payload = {"fields": fields}
+
+        # Add optional parameters
+        if update:
+            payload["update"] = update
+
+        if history_metadata:
+            payload["historyMetadata"] = history_metadata
+
+        if properties:
+            payload["properties"] = properties
+
+        if transition:
+            payload["transition"] = transition
+
+        endpoint = "/issue"
+        logger.debug(f"Creating issue with v3 API endpoint: {endpoint}")
+        logger.debug(f"Create issue payload: {json.dumps(payload, indent=2)}")
+
+        response_data = await self._make_v3_api_request("POST", endpoint, data=payload)
+        logger.debug(f"Create issue response: {response_data}")
         return response_data
 
     async def search_issues(
