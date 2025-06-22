@@ -82,6 +82,13 @@ class JiraIssueResult(BaseModel):
     updated: Optional[str] = None
     fields: Optional[Dict[str, Any]] = None
     comments: Optional[List[Dict[str, Any]]] = None
+    watchers: Optional[Dict[str, Any]] = None
+    attachments: Optional[List[Dict[str, Any]]] = None
+    subtasks: Optional[List[Dict[str, Any]]] = None
+    project: Optional[Dict[str, Any]] = None
+    issue_links: Optional[List[Dict[str, Any]]] = None
+    worklog: Optional[List[Dict[str, Any]]] = None
+    timetracking: Optional[Dict[str, Any]] = None
 
 
 class JiraProjectResult(BaseModel):
@@ -403,56 +410,65 @@ class JiraServer:
                 f"Failed to get issue {issue_key}: {type(e).__name__}: {str(e)}"
             )
 
-    def search_jira_issues(
+    async def search_jira_issues(
         self, jql: str, max_results: int = 10
     ) -> List[JiraIssueResult]:
-        """Search for issues using JQL"""
-        if not self.client:
-            if not self.connect():
-                # Connection failed - provide clear error message
-                raise ValueError(
-                    f"Failed to connect to Jira server at {self.server_url}. Check your authentication credentials."
-                )
+        """Search for issues using JQL via v3 REST API with pagination support"""
+        logger.info("Starting search_jira_issues...")
 
         try:
-            issues = self.client.search_issues(jql, maxResults=max_results)
-
-            return [
-                JiraIssueResult(
-                    key=issue.key,
-                    summary=issue.fields.summary,
-                    description=issue.fields.description,
-                    status=(
-                        issue.fields.status.name
-                        if hasattr(issue.fields, "status")
-                        else None
-                    ),
-                    assignee=(
-                        issue.fields.assignee.displayName
-                        if hasattr(issue.fields, "assignee") and issue.fields.assignee
-                        else None
-                    ),
-                    reporter=(
-                        issue.fields.reporter.displayName
-                        if hasattr(issue.fields, "reporter") and issue.fields.reporter
-                        else None
-                    ),
-                    created=(
-                        issue.fields.created
-                        if hasattr(issue.fields, "created")
-                        else None
-                    ),
-                    updated=(
-                        issue.fields.updated
-                        if hasattr(issue.fields, "updated")
-                        else None
-                    ),
+            # Use v3 API client
+            v3_client = self._get_v3_api_client()
+            
+            # Collect all issues from all pages
+            all_issues = []
+            start_at = 0
+            page_size = min(max_results, 100)  # Jira typically limits to 100 per page
+            
+            while True:
+                logger.debug(f"Fetching page starting at {start_at} with page size {page_size}")
+                response_data = await v3_client.search_issues(
+                    jql=jql, 
+                    start_at=start_at,
+                    max_results=page_size
                 )
-                for issue in issues
-            ]
+
+                # Extract issues from current page
+                page_issues = response_data.get("issues", [])
+                all_issues.extend(page_issues)
+                
+                logger.debug(f"Retrieved {len(page_issues)} issues from current page. Total so far: {len(all_issues)}")
+
+                # Check if we've reached the user's max_results limit
+                if len(all_issues) >= max_results:
+                    # Trim to exact max_results if we exceeded it
+                    all_issues = all_issues[:max_results]
+                    logger.debug(f"Reached max_results limit of {max_results}, stopping pagination")
+                    break
+
+                # Check if this is the last page according to API
+                is_last = response_data.get("isLast", True)
+                if is_last:
+                    logger.debug("API indicates this is the last page, stopping pagination")
+                    break
+
+                # If we have more pages, prepare for next iteration
+                start_at = len(all_issues)  # Use actual number of issues retrieved so far
+                
+                # Adjust page size for next request to not exceed max_results
+                remaining_needed = max_results - len(all_issues)
+                page_size = min(remaining_needed, 100)
+
+            # Return raw issues list for full JSON data
+            logger.info(f"Returning raw issues ({len(all_issues)}) for JQL: {jql}")
+            return all_issues
+
+
         except Exception as e:
-            print(f"Failed to search issues: {type(e).__name__}: {str(e)}")
-            raise ValueError(f"Failed to search issues: {type(e).__name__}: {str(e)}")
+            error_msg = f"Failed to search issues: {type(e).__name__}: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            print(error_msg)
+            raise ValueError(error_msg)
 
     def create_jira_issue(
         self,
@@ -1475,13 +1491,13 @@ async def serve(
                     logger.info("Synchronous tool get_jira_issue completed.")
 
                 case JiraTools.SEARCH_ISSUES.value:
-                    logger.info("Calling synchronous tool search_jira_issues...")
+                    logger.info("Calling async tool search_jira_issues...")
                     jql = arguments.get("jql")
                     if not jql:
                         raise ValueError("Missing required argument: jql")
                     max_results = arguments.get("max_results", 10)
-                    result = jira_server.search_jira_issues(jql, max_results)
-                    logger.info("Synchronous tool search_jira_issues completed.")
+                    result = await jira_server.search_jira_issues(jql, max_results)
+                    logger.info("Async tool search_jira_issues completed.")
 
                 case JiraTools.CREATE_ISSUE.value:
                     logger.info("Calling synchronous tool create_jira_issue...")
@@ -1602,7 +1618,6 @@ async def serve(
                     serialized_result = result
                     
             json_result = json.dumps(serialized_result, indent=2)
-            logger.warning("RETURNING HARDCODED DEBUG MESSAGE INSTEAD OF REAL DATA")
             return [TextContent(type="text", text=json_result)]
 
         except Exception as e:
