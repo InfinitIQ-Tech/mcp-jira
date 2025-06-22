@@ -216,16 +216,18 @@ class TestSearchIssuesJiraServer:
             result = await server.search_jira_issues("project = TEST", max_results=10)
 
         # Verify the result
+        assert isinstance(result, list)
         assert len(result) == 1
-        assert isinstance(result[0], JiraIssueResult)
-        assert result[0].key == "TEST-1"
-        assert result[0].summary == "Test Summary"
-        assert result[0].description == "Test Description"
-        assert result[0].status == "Open"
-        assert result[0].assignee == "Test User"
-        assert result[0].reporter == "Reporter User"
-        assert result[0].created == "2023-01-01T00:00:00.000+0000"
-        assert result[0].updated == "2023-01-02T00:00:00.000+0000"
+        issue = result[0]
+        assert isinstance(issue, dict)
+        assert issue["key"] == "TEST-1"
+        assert issue["fields"]["summary"] == "Test Summary"
+        assert issue["fields"]["description"] == "Test Description"
+        assert issue["fields"]["status"]["name"] == "Open"
+        assert issue["fields"]["assignee"]["displayName"] == "Test User"
+        assert issue["fields"]["reporter"]["displayName"] == "Reporter User"
+        assert issue["fields"]["created"] == "2023-01-01T00:00:00.000+0000"
+        assert issue["fields"]["updated"] == "2023-01-02T00:00:00.000+0000"
 
         # Verify V3 client was called correctly
         mock_v3_client.search_issues.assert_called_once_with(
@@ -262,13 +264,17 @@ class TestSearchIssuesJiraServer:
             result = await server.search_jira_issues("project = TEST")
 
         # Verify the result handles missing fields gracefully
+        assert isinstance(result, list)
         assert len(result) == 1
-        assert result[0].key == "TEST-2"
-        assert result[0].summary == "Basic Summary"
-        assert result[0].description == ""  # Should default to empty string for missing description
-        assert result[0].status is None      # Should be None for missing status
-        assert result[0].assignee is None    # Should be None for missing assignee
-        assert result[0].reporter is None    # Should be None for missing reporter
+        issue = result[0]
+        assert isinstance(issue, dict)
+        assert issue["key"] == "TEST-2"
+        assert issue["fields"]["summary"] == "Basic Summary"
+        # Missing description, status, assignee, reporter should be absent or None
+        assert issue["fields"].get("description") is None
+        assert issue["fields"].get("status") is None
+        assert issue["fields"].get("assignee") is None
+        assert issue["fields"].get("reporter") is None
 
     @pytest.mark.asyncio
     async def test_server_search_issues_api_error(self):
@@ -395,30 +401,32 @@ class TestSearchIssuesJiraServer:
             result = await server.search_jira_issues("project = TEST", max_results=10)
 
         # Verify all issues from all pages were retrieved
+        assert isinstance(result, list)
         assert len(result) == 5
-        assert isinstance(result[0], JiraIssueResult)
         
-        # Check each issue
-        assert result[0].key == "TEST-1"
-        assert result[0].summary == "First Issue"
-        assert result[0].status == "Open"
+        # Check each issue dict
+        assert isinstance(result[0], dict)
+        assert result[0]["key"] == "TEST-1"
+        assert result[0]["fields"]["summary"] == "First Issue"
+        assert result[0]["fields"]["status"]["name"] == "Open"
         
-        assert result[1].key == "TEST-2"
-        assert result[1].summary == "Second Issue"
-        assert result[1].status == "In Progress"
+        assert result[1]["key"] == "TEST-2"
+        assert result[1]["fields"]["summary"] == "Second Issue"
+        assert result[1]["fields"]["status"]["name"] == "In Progress"
         
-        assert result[2].key == "TEST-3"
-        assert result[2].summary == "Third Issue"
-        assert result[2].status == "Done"
+        assert result[2]["key"] == "TEST-3"
+        assert result[2]["fields"]["summary"] == "Third Issue"
+        assert result[2]["fields"]["status"]["name"] == "Done"
         
-        assert result[3].key == "TEST-4"
-        assert result[3].summary == "Fourth Issue"
-        assert result[3].status == "Closed"
-        assert result[3].assignee is None  # Test None handling
+        assert result[3]["key"] == "TEST-4"
+        assert result[3]["fields"]["summary"] == "Fourth Issue"
+        assert result[3]["fields"]["status"]["name"] == "Closed"
+        # None handling
+        assert result[3]["fields"].get("assignee") is None
         
-        assert result[4].key == "TEST-5"
-        assert result[4].summary == "Fifth Issue"
-        assert result[4].status == "Open"
+        assert result[4]["key"] == "TEST-5"
+        assert result[4]["fields"]["summary"] == "Fifth Issue"
+        assert result[4]["fields"]["status"]["name"] == "Open"
 
         # Verify V3 client was called the correct number of times with correct parameters
         assert mock_v3_client.search_issues.call_count == 3
@@ -483,12 +491,13 @@ class TestSearchIssuesJiraServer:
             result = await server.search_jira_issues("project = TEST", max_results=5)
 
         # Verify exactly 5 issues were returned (respecting max_results)
+        assert isinstance(result, list)
         assert len(result) == 5
-        assert result[0].key == "TEST-1"
-        assert result[1].key == "TEST-2"
-        assert result[2].key == "TEST-3"
-        assert result[3].key == "TEST-4"
-        assert result[4].key == "TEST-5"
+        assert result[0]["key"] == "TEST-1"
+        assert result[1]["key"] == "TEST-2"
+        assert result[2]["key"] == "TEST-3"
+        assert result[3]["key"] == "TEST-4"
+        assert result[4]["key"] == "TEST-5"
 
         # Verify pagination stopped at the right point
         assert mock_v3_client.search_issues.call_count == 2
