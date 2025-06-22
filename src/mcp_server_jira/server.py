@@ -403,56 +403,63 @@ class JiraServer:
                 f"Failed to get issue {issue_key}: {type(e).__name__}: {str(e)}"
             )
 
-    def search_jira_issues(
+    async def search_jira_issues(
         self, jql: str, max_results: int = 10
     ) -> List[JiraIssueResult]:
-        """Search for issues using JQL"""
-        if not self.client:
-            if not self.connect():
-                # Connection failed - provide clear error message
-                raise ValueError(
-                    f"Failed to connect to Jira server at {self.server_url}. Check your authentication credentials."
-                )
+        """Search for issues using JQL via v3 REST API"""
+        logger.info("Starting search_jira_issues...")
 
         try:
-            issues = self.client.search_issues(jql, maxResults=max_results)
+            # Use v3 API client
+            v3_client = self._get_v3_api_client()
+            response_data = await v3_client.search_issues(
+                jql=jql, max_results=max_results
+            )
 
-            return [
-                JiraIssueResult(
-                    key=issue.key,
-                    summary=issue.fields.summary,
-                    description=issue.fields.description,
-                    status=(
-                        issue.fields.status.name
-                        if hasattr(issue.fields, "status")
-                        else None
-                    ),
-                    assignee=(
-                        issue.fields.assignee.displayName
-                        if hasattr(issue.fields, "assignee") and issue.fields.assignee
-                        else None
-                    ),
-                    reporter=(
-                        issue.fields.reporter.displayName
-                        if hasattr(issue.fields, "reporter") and issue.fields.reporter
-                        else None
-                    ),
-                    created=(
-                        issue.fields.created
-                        if hasattr(issue.fields, "created")
-                        else None
-                    ),
-                    updated=(
-                        issue.fields.updated
-                        if hasattr(issue.fields, "updated")
-                        else None
-                    ),
+            # Extract issues from response
+            issues = response_data.get("issues", [])
+
+            # Convert to JiraIssueResult objects maintaining compatibility
+            results = []
+            for issue in issues:
+                # Extract fields with safe access
+                fields = issue.get("fields", {})
+                
+                # Handle status
+                status = None
+                if "status" in fields and fields["status"]:
+                    status = fields["status"].get("name")
+
+                # Handle assignee
+                assignee = None
+                if "assignee" in fields and fields["assignee"]:
+                    assignee = fields["assignee"].get("displayName")
+
+                # Handle reporter
+                reporter = None
+                if "reporter" in fields and fields["reporter"]:
+                    reporter = fields["reporter"].get("displayName")
+
+                result = JiraIssueResult(
+                    key=issue.get("key", ""),
+                    summary=fields.get("summary", ""),
+                    description=fields.get("description", ""),
+                    status=status,
+                    assignee=assignee,
+                    reporter=reporter,
+                    created=fields.get("created"),
+                    updated=fields.get("updated"),
                 )
-                for issue in issues
-            ]
+                results.append(result)
+
+            logger.info(f"Found {len(results)} issues for JQL: {jql}")
+            return results
+
         except Exception as e:
-            print(f"Failed to search issues: {type(e).__name__}: {str(e)}")
-            raise ValueError(f"Failed to search issues: {type(e).__name__}: {str(e)}")
+            error_msg = f"Failed to search issues: {type(e).__name__}: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            print(error_msg)
+            raise ValueError(error_msg)
 
     def create_jira_issue(
         self,
@@ -1475,13 +1482,13 @@ async def serve(
                     logger.info("Synchronous tool get_jira_issue completed.")
 
                 case JiraTools.SEARCH_ISSUES.value:
-                    logger.info("Calling synchronous tool search_jira_issues...")
+                    logger.info("Calling async tool search_jira_issues...")
                     jql = arguments.get("jql")
                     if not jql:
                         raise ValueError("Missing required argument: jql")
                     max_results = arguments.get("max_results", 10)
-                    result = jira_server.search_jira_issues(jql, max_results)
-                    logger.info("Synchronous tool search_jira_issues completed.")
+                    result = await jira_server.search_jira_issues(jql, max_results)
+                    logger.info("Async tool search_jira_issues completed.")
 
                 case JiraTools.CREATE_ISSUE.value:
                     logger.info("Calling synchronous tool create_jira_issue...")
