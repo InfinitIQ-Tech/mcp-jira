@@ -10,7 +10,9 @@ from typing import Any, Dict, Optional
 import httpx
 
 import logging
-logger = logging.getLogger("JiraMCPLogger") # Get the same logger instance
+
+logger = logging.getLogger("JiraMCPLogger")  # Get the same logger instance
+
 
 class JiraV3APIClient:
     """Client for making direct requests to Jira's v3 REST API"""
@@ -30,12 +32,14 @@ class JiraV3APIClient:
             password: Password for basic auth
             token: API token for auth
         """
-        self.server_url = server_url.rstrip('/')
+        self.server_url = server_url.rstrip("/")
         self.username = username
         self.auth_token = token or password
 
         if not self.username or not self.auth_token:
-            raise ValueError("Jira username and an API token (or password) are required for v3 API.")
+            raise ValueError(
+                "Jira username and an API token (or password) are required for v3 API."
+            )
 
         self.client = httpx.AsyncClient(
             auth=(self.username, self.auth_token),
@@ -45,13 +49,17 @@ class JiraV3APIClient:
         )
 
     async def _make_v3_api_request(
-        self, method: str, endpoint: str, data: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None
+        self,
+        method: str,
+        endpoint: str,
+        data: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Sends an authenticated async HTTP request to a Jira v3 REST API endpoint.
         """
         url = f"{self.server_url}/rest/api/3{endpoint}"
-        
+
         logger.debug(f"Attempting to make request: {method} {url}")
         logger.debug(f"Request params: {params}")
         logger.debug(f"Request JSON data: {data}")
@@ -64,26 +72,33 @@ class JiraV3APIClient:
                 json=data,
                 params=params,
             )
-            logger.info(f"COMPLETED httpx.client.request for {url}. Status: {response.status_code}")
+            logger.info(
+                f"COMPLETED httpx.client.request for {url}. Status: {response.status_code}"
+            )
             logger.debug(f"Raw response text (first 500 chars): {response.text[:500]}")
 
             response.raise_for_status()
-            
+
             if response.status_code == 204:
                 return {}
 
             return response.json()
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP Status Error for {e.request.url!r}: {e.response.status_code}", exc_info=True)
+            logger.error(
+                f"HTTP Status Error for {e.request.url!r}: {e.response.status_code}",
+                exc_info=True,
+            )
             error_details = f"Jira API returned an error: {e.response.status_code} {e.response.reason_phrase}."
             raise ValueError(error_details)
-        
+
         except httpx.RequestError as e:
             logger.error(f"Request Error for {e.request.url!r}", exc_info=True)
             raise ValueError(f"A network error occurred while connecting to Jira: {e}")
         except Exception as e:
-            logger.critical("An unexpected error occurred in _make_v3_api_request", exc_info=True)
+            logger.critical(
+                "An unexpected error occurred in _make_v3_api_request", exc_info=True
+            )
             raise
 
     async def create_project(
@@ -103,9 +118,9 @@ class JiraV3APIClient:
     ) -> Dict[str, Any]:
         """
         Creates a new Jira project using the v3 REST API.
-        
+
         Requires a project key and the Atlassian accountId of the project lead (`assignee`). The v3 API mandates that `leadAccountId` is always provided, regardless of default project lead settings or UI behavior. Additional project attributes such as name, type, template, avatar, schemes, category, and documentation URL can be specified.
-        
+
         Args:
             key: The unique project key (required).
             name: The project name. Defaults to the key if not provided.
@@ -119,10 +134,10 @@ class JiraV3APIClient:
             notificationScheme: ID of the notification scheme.
             categoryId: Alternative to projectCategory; preferred for v3 API.
             url: URL for project information or documentation.
-        
+
         Returns:
             A dictionary containing details of the created project as returned by Jira.
-        
+
         Raises:
             ValueError: If required parameters are missing or project creation fails.
         """
@@ -130,7 +145,9 @@ class JiraV3APIClient:
             raise ValueError("Project key is required")
 
         if not assignee:
-            raise ValueError("Parameter 'assignee' (leadAccountId) is required by the Jira v3 API")
+            raise ValueError(
+                "Parameter 'assignee' (leadAccountId) is required by the Jira v3 API"
+            )
 
         payload = {
             "key": key,
@@ -146,11 +163,13 @@ class JiraV3APIClient:
             "categoryId": categoryId or projectCategory,
             "url": url,
         }
-        
+
         payload = {k: v for k, v in payload.items() if v is not None}
-        
+
         print(f"Creating project with v3 API payload: {json.dumps(payload, indent=2)}")
-        response_data = await self._make_v3_api_request("POST", "/project", data=payload)
+        response_data = await self._make_v3_api_request(
+            "POST", "/project", data=payload
+        )
         print(f"Project creation response: {json.dumps(response_data, indent=2)}")
         return response_data
 
@@ -169,17 +188,17 @@ class JiraV3APIClient:
     ) -> Dict[str, Any]:
         """
         Get projects paginated using the v3 REST API.
-        
-        Returns a paginated list of projects visible to the user using the 
+
+        Returns a paginated list of projects visible to the user using the
         /rest/api/3/project/search endpoint.
-        
+
         Args:
             start_at: The index of the first item to return (default: 0)
             max_results: The maximum number of items to return per page (default: 50)
             order_by: Order the results by a field:
                      - category: Order by project category
                      - issueCount: Order by total number of issues
-                     - key: Order by project key  
+                     - key: Order by project key
                      - lastIssueUpdatedDate: Order by last issue update date
                      - name: Order by project name
                      - owner: Order by project lead
@@ -192,10 +211,10 @@ class JiraV3APIClient:
             category_id: Filter projects by category ID
             action: Filter by action permission (view, browse, edit)
             expand: Expand additional project fields in response
-            
+
         Returns:
             Dictionary containing the paginated response with projects and pagination info
-            
+
         Raises:
             ValueError: If the API request fails
         """
@@ -211,11 +230,13 @@ class JiraV3APIClient:
             "action": action,
             "expand": expand,
         }
-        
+
         params = {k: v for k, v in params.items() if v is not None}
-        
+
         endpoint = "/project/search"
-        print(f"Fetching projects with v3 API endpoint: {endpoint} with params: {params}")
+        print(
+            f"Fetching projects with v3 API endpoint: {endpoint} with params: {params}"
+        )
         response_data = await self._make_v3_api_request("GET", endpoint, params=params)
         print(f"Projects API response: {json.dumps(response_data, indent=2)}")
         return response_data
@@ -231,10 +252,10 @@ class JiraV3APIClient:
     ) -> Dict[str, Any]:
         """
         Get available transitions for an issue using the v3 REST API.
-        
-        Returns either all transitions or a transition that can be performed by the user 
+
+        Returns either all transitions or a transition that can be performed by the user
         on an issue, based on the issue's status.
-        
+
         Args:
             issue_id_or_key: Issue ID or key (required)
             expand: Expand additional transition fields in response
@@ -242,10 +263,10 @@ class JiraV3APIClient:
             skip_remote_only_condition: Skip remote-only conditions check
             include_unavailable_transitions: Include transitions that can't be performed
             sort_by_ops_bar_and_status: Sort transitions by operations bar and status
-            
+
         Returns:
             Dictionary containing the transitions response with transition details
-            
+
         Raises:
             ValueError: If the API request fails
         """
@@ -259,11 +280,13 @@ class JiraV3APIClient:
             "includeUnavailableTransitions": include_unavailable_transitions,
             "sortByOpsBarAndStatus": sort_by_ops_bar_and_status,
         }
-        
+
         params = {k: v for k, v in params.items() if v is not None}
-        
+
         endpoint = f"/issue/{issue_id_or_key}/transitions"
-        logger.debug(f"Fetching transitions with v3 API endpoint: {endpoint} with params: {params}")
+        logger.debug(
+            f"Fetching transitions with v3 API endpoint: {endpoint} with params: {params}"
+        )
         response_data = await self._make_v3_api_request("GET", endpoint, params=params)
         logger.debug(f"Transitions API response: {json.dumps(response_data, indent=2)}")
         return response_data
@@ -279,10 +302,10 @@ class JiraV3APIClient:
     ) -> Dict[str, Any]:
         """
         Transition an issue using the v3 REST API.
-        
-        Performs an issue transition and, if the transition has a screen, 
+
+        Performs an issue transition and, if the transition has a screen,
         updates the fields from the transition screen.
-        
+
         Args:
             issue_id_or_key: Issue ID or key (required)
             transition_id: ID of the transition to perform (required)
@@ -290,25 +313,21 @@ class JiraV3APIClient:
             comment: Simple string comment to add during transition
             history_metadata: Optional history metadata for the transition
             properties: Optional list of properties to set
-            
+
         Returns:
             Empty dictionary on success (204 No Content response)
-            
+
         Raises:
             ValueError: If required parameters are missing or transition fails
         """
         if not issue_id_or_key:
             raise ValueError("issue_id_or_key is required")
-        
+
         if not transition_id:
             raise ValueError("transition_id is required")
 
         # Build the request payload
-        payload = {
-            "transition": {
-                "id": transition_id
-            }
-        }
+        payload = {"transition": {"id": transition_id}}
 
         # Add fields if provided
         if fields:
@@ -326,14 +345,9 @@ class JiraV3APIClient:
                                 "content": [
                                     {
                                         "type": "paragraph",
-                                        "content": [
-                                            {
-                                                "type": "text",
-                                                "text": comment
-                                            }
-                                        ]
+                                        "content": [{"type": "text", "text": comment}],
                                     }
-                                ]
+                                ],
                             }
                         }
                     }
@@ -350,7 +364,7 @@ class JiraV3APIClient:
         endpoint = f"/issue/{issue_id_or_key}/transitions"
         logger.debug(f"Transitioning issue with v3 API endpoint: {endpoint}")
         logger.debug(f"Transition payload: {json.dumps(payload, indent=2)}")
-        
+
         response_data = await self._make_v3_api_request("POST", endpoint, data=payload)
         logger.debug(f"Transition response: {response_data}")
         return response_data

@@ -14,11 +14,13 @@ logger.setLevel(logging.DEBUG)  # Capture all levels of logs
 
 # Create a file handler to write logs to a file
 # Use 'w' to overwrite the file on each run, ensuring a clean log
-handler = logging.FileHandler(log_file_path, mode='w')
+handler = logging.FileHandler(log_file_path, mode="w")
 handler.setLevel(logging.DEBUG)
 
 # Create a formatter to make the logs readable
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s')
+formatter = logging.Formatter(
+    "%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
+)
 handler.setFormatter(formatter)
 
 # Add the handler to the logger
@@ -108,7 +110,7 @@ class JiraServer:
         self.username = username
         self.password = password
         self.token = token
-        
+
         self._v3_api_client = JiraV3APIClient(
             server_url=self.server_url,
             username=self.username,
@@ -255,14 +257,15 @@ class JiraServer:
 
         while True:
             page_count += 1
-            logger.info(f"Pagination loop, page {page_count}: startAt={start_at}, maxResults={max_results}")
-            
+            logger.info(
+                f"Pagination loop, page {page_count}: startAt={start_at}, maxResults={max_results}"
+            )
+
             try:
                 response = await self._v3_api_client.get_projects(
-                    start_at=start_at,
-                    max_results=max_results
+                    start_at=start_at, max_results=max_results
                 )
-                
+
                 projects = response.get("values", [])
                 if not projects:
                     logger.info("No more projects returned. Breaking pagination loop.")
@@ -274,24 +277,34 @@ class JiraServer:
                     logger.info("'isLast' is True. Breaking pagination loop.")
                     break
 
-                start_at += len(projects)                
-                
+                start_at += len(projects)
+
                 # Yield control to the event loop to prevent deadlocks in the MCP framework.
                 await asyncio.sleep(0)
-                
 
             except Exception as e:
-                logger.error("Error inside get_jira_projects pagination loop", exc_info=True)
+                logger.error(
+                    "Error inside get_jira_projects pagination loop", exc_info=True
+                )
                 raise
 
-        logger.info(f"Finished get_jira_projects. Total projects found: {len(all_projects_data)}")
-        
+        logger.info(
+            f"Finished get_jira_projects. Total projects found: {len(all_projects_data)}"
+        )
+
         results = []
         for p in all_projects_data:
-             results.append(JiraProjectResult(key=p.get('key'), name=p.get('name'), id=str(p.get('id')), lead=(p.get('lead') or {}).get('displayName')))
-             logger.info(f"Added project {p.get('key')} to results")
+            results.append(
+                JiraProjectResult(
+                    key=p.get("key"),
+                    name=p.get("name"),
+                    id=str(p.get("id")),
+                    lead=(p.get("lead") or {}).get("displayName"),
+                )
+            )
+            logger.info(f"Added project {p.get('key')} to results")
         logger.info(f"Returning {len(results)} projects")
-        sys.stdout.flush() # Flush stdout to ensure it's sent to MCP, otherwise hang occurs        
+        sys.stdout.flush()  # Flush stdout to ensure it's sent to MCP, otherwise hang occurs
         return results
 
     def get_jira_issue(self, issue_key: str) -> JiraIssueResult:
@@ -1001,24 +1014,24 @@ class JiraServer:
     async def get_jira_transitions(self, issue_key: str) -> List[JiraTransitionResult]:
         """Get available transitions for an issue using v3 REST API"""
         logger.info("Starting get_jira_transitions...")
-        
+
         try:
             # Use v3 API client
             v3_client = self._get_v3_api_client()
             response_data = await v3_client.get_transitions(issue_id_or_key=issue_key)
-            
+
             # Extract transitions from response
             transitions = response_data.get("transitions", [])
-            
+
             # Convert to JiraTransitionResult objects maintaining compatibility
             results = [
                 JiraTransitionResult(id=transition["id"], name=transition["name"])
                 for transition in transitions
             ]
-            
+
             logger.info(f"Found {len(results)} transitions for issue {issue_key}")
             return results
-            
+
         except Exception as e:
             error_msg = f"Failed to get transitions for {issue_key}: {type(e).__name__}: {str(e)}"
             logger.error(error_msg, exc_info=True)
@@ -1034,7 +1047,7 @@ class JiraServer:
     ) -> bool:
         """Transition an issue to a new state using v3 REST API"""
         logger.info("Starting transition_jira_issue...")
-        
+
         try:
             # Use v3 API client
             v3_client = self._get_v3_api_client()
@@ -1042,14 +1055,18 @@ class JiraServer:
                 issue_id_or_key=issue_key,
                 transition_id=transition_id,
                 fields=fields,
-                comment=comment
+                comment=comment,
             )
-            
-            logger.info(f"Successfully transitioned issue {issue_key} to transition {transition_id}")
+
+            logger.info(
+                f"Successfully transitioned issue {issue_key} to transition {transition_id}"
+            )
             return True
-            
+
         except Exception as e:
-            error_msg = f"Failed to transition {issue_key}: {type(e).__name__}: {str(e)}"
+            error_msg = (
+                f"Failed to transition {issue_key}: {type(e).__name__}: {str(e)}"
+            )
             logger.error(error_msg, exc_info=True)
             print(error_msg)
             raise ValueError(error_msg)
@@ -1196,7 +1213,7 @@ class JiraServer:
 
             # Extract project details from response
             project_id = response_data.get("id", "0")
-            project_key = response_data.get("key", key)            
+            project_key = response_data.get("key", key)
 
             # For lead information, we would need to make another API call
             # For now, return None for lead as it's optional in our result model
@@ -1213,7 +1230,7 @@ class JiraServer:
 
 
 async def serve(
-    server_url: Optional[str] = None,   
+    server_url: Optional[str] = None,
     auth_method: Optional[str] = None,
     username: Optional[str] = None,
     password: Optional[str] = None,
@@ -1461,12 +1478,14 @@ async def serve(
         logger.info(f"call_tool invoked. Tool: '{name}', Arguments: {arguments}")
         try:
             result: Any
-            
+
             match name:
                 case JiraTools.GET_PROJECTS.value:
                     logger.info("About to AWAIT jira_server.get_jira_projects...")
                     result = await jira_server.get_jira_projects()
-                    logger.info(f"COMPLETED await jira_server.get_jira_projects. Result has {len(result)} items.")
+                    logger.info(
+                        f"COMPLETED await jira_server.get_jira_projects. Result has {len(result)} items."
+                    )
 
                 case JiraTools.GET_ISSUE.value:
                     logger.info("Calling synchronous tool get_jira_issue...")
@@ -1490,7 +1509,9 @@ async def serve(
                     required_args = ["project", "summary", "description", "issue_type"]
                     if not all(arg in arguments for arg in required_args):
                         missing = [arg for arg in required_args if arg not in arguments]
-                        raise ValueError(f"Missing required arguments: {', '.join(missing)}")
+                        raise ValueError(
+                            f"Missing required arguments: {', '.join(missing)}"
+                        )
                     result = jira_server.create_jira_issue(
                         arguments["project"],
                         arguments["summary"],
@@ -1514,7 +1535,9 @@ async def serve(
                     issue_key = arguments.get("issue_key")
                     comment_text = arguments.get("comment") or arguments.get("body")
                     if not issue_key or not comment_text:
-                        raise ValueError("Missing required arguments: issue_key and comment (or body)")
+                        raise ValueError(
+                            "Missing required arguments: issue_key and comment (or body)"
+                        )
                     result = jira_server.add_jira_comment(issue_key, comment_text)
                     logger.info("Synchronous tool add_jira_comment completed.")
 
@@ -1531,19 +1554,27 @@ async def serve(
                     issue_key = arguments.get("issue_key")
                     transition_id = arguments.get("transition_id")
                     if not issue_key or not transition_id:
-                        raise ValueError("Missing required arguments: issue_key and transition_id")
+                        raise ValueError(
+                            "Missing required arguments: issue_key and transition_id"
+                        )
                     comment = arguments.get("comment")
                     fields = arguments.get("fields")
-                    result = await jira_server.transition_jira_issue(issue_key, transition_id, comment, fields)
+                    result = await jira_server.transition_jira_issue(
+                        issue_key, transition_id, comment, fields
+                    )
                     logger.info("Async tool transition_jira_issue completed.")
 
                 case JiraTools.GET_PROJECT_ISSUE_TYPES.value:
-                    logger.info("Calling synchronous tool get_jira_project_issue_types...")
+                    logger.info(
+                        "Calling synchronous tool get_jira_project_issue_types..."
+                    )
                     project_key = arguments.get("project_key")
                     if not project_key:
                         raise ValueError("Missing required argument: project_key")
                     result = jira_server.get_jira_project_issue_types(project_key)
-                    logger.info("Synchronous tool get_jira_project_issue_types completed.")
+                    logger.info(
+                        "Synchronous tool get_jira_project_issue_types completed."
+                    )
 
                 case JiraTools.CREATE_PROJECT.value:
                     logger.info("About to AWAIT jira_server.create_jira_project...")
@@ -1551,12 +1582,23 @@ async def serve(
                     if not key:
                         raise ValueError("Missing required argument: key")
                     # Type conversion logic from original code
-                    for int_key in ["avatarId", "issueSecurityScheme", "permissionScheme", "projectCategory", "notificationScheme", "categoryId"]:
-                        if int_key in arguments and isinstance(arguments[int_key], str) and arguments[int_key].isdigit():
+                    for int_key in [
+                        "avatarId",
+                        "issueSecurityScheme",
+                        "permissionScheme",
+                        "projectCategory",
+                        "notificationScheme",
+                        "categoryId",
+                    ]:
+                        if (
+                            int_key in arguments
+                            and isinstance(arguments[int_key], str)
+                            and arguments[int_key].isdigit()
+                        ):
                             arguments[int_key] = int(arguments[int_key])
                     result = await jira_server.create_jira_project(**arguments)
                     logger.info("COMPLETED await jira_server.create_jira_project.")
-                
+
                 case _:
                     raise ValueError(f"Unknown tool: {name}")
 
@@ -1565,7 +1607,9 @@ async def serve(
                 (
                     [r.model_dump() for r in result]
                     if isinstance(result, list)
-                    else (result.model_dump() if hasattr(result, "model_dump") else result)
+                    else (
+                        result.model_dump() if hasattr(result, "model_dump") else result
+                    )
                 ),
                 indent=2,
             )
@@ -1573,8 +1617,19 @@ async def serve(
             return [TextContent(type="text", text=json_result)]
 
         except Exception as e:
-            logger.critical(f"FATAL error in call_tool for tool '{name}'", exc_info=True)
-            return [TextContent(type="text", text=json.dumps({"error": f"Error in tool '{name}': {type(e).__name__}: {str(e)}"}))]
+            logger.critical(
+                f"FATAL error in call_tool for tool '{name}'", exc_info=True
+            )
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        {
+                            "error": f"Error in tool '{name}': {type(e).__name__}: {str(e)}"
+                        }
+                    ),
+                )
+            ]
 
     options = server.create_initialization_options()
     async with stdio_server() as (read_stream, write_stream):
