@@ -406,22 +406,55 @@ class JiraServer:
     async def search_jira_issues(
         self, jql: str, max_results: int = 10
     ) -> List[JiraIssueResult]:
-        """Search for issues using JQL via v3 REST API"""
+        """Search for issues using JQL via v3 REST API with pagination support"""
         logger.info("Starting search_jira_issues...")
 
         try:
             # Use v3 API client
             v3_client = self._get_v3_api_client()
-            response_data = await v3_client.search_issues(
-                jql=jql, max_results=max_results
-            )
+            
+            # Collect all issues from all pages
+            all_issues = []
+            start_at = 0
+            page_size = min(max_results, 100)  # Jira typically limits to 100 per page
+            
+            while True:
+                logger.debug(f"Fetching page starting at {start_at} with page size {page_size}")
+                response_data = await v3_client.search_issues(
+                    jql=jql, 
+                    start_at=start_at,
+                    max_results=page_size
+                )
 
-            # Extract issues from response
-            issues = response_data.get("issues", [])
+                # Extract issues from current page
+                page_issues = response_data.get("issues", [])
+                all_issues.extend(page_issues)
+                
+                logger.debug(f"Retrieved {len(page_issues)} issues from current page. Total so far: {len(all_issues)}")
+
+                # Check if we've reached the user's max_results limit
+                if len(all_issues) >= max_results:
+                    # Trim to exact max_results if we exceeded it
+                    all_issues = all_issues[:max_results]
+                    logger.debug(f"Reached max_results limit of {max_results}, stopping pagination")
+                    break
+
+                # Check if this is the last page according to API
+                is_last = response_data.get("isLast", True)
+                if is_last:
+                    logger.debug("API indicates this is the last page, stopping pagination")
+                    break
+
+                # If we have more pages, prepare for next iteration
+                start_at = len(all_issues)  # Use actual number of issues retrieved so far
+                
+                # Adjust page size for next request to not exceed max_results
+                remaining_needed = max_results - len(all_issues)
+                page_size = min(remaining_needed, 100)
 
             # Convert to JiraIssueResult objects maintaining compatibility
             results = []
-            for issue in issues:
+            for issue in all_issues:
                 # Extract fields with safe access
                 fields = issue.get("fields", {})
                 
@@ -452,7 +485,7 @@ class JiraServer:
                 )
                 results.append(result)
 
-            logger.info(f"Found {len(results)} issues for JQL: {jql}")
+            logger.info(f"Found {len(results)} issues for JQL: {jql} across multiple pages")
             return results
 
         except Exception as e:
