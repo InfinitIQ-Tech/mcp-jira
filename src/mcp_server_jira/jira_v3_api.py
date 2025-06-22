@@ -401,3 +401,45 @@ class JiraV3APIClient:
         response_data = await self._make_v3_api_request("GET", endpoint)
         logger.debug(f"Issue types API response: {json.dumps(response_data, indent=2)}")
         return response_data
+
+    async def bulk_create_issues(
+        self, 
+        issue_updates: list
+    ) -> Dict[str, Any]:
+        """
+        Bulk create issues using the v3 REST API.
+
+        Creates up to 50 issues and, where the option to create subtasks is enabled in Jira,
+        subtasks. Transitions may be applied, to move the issues or subtasks to a workflow
+        step other than the default start step, and issue properties set.
+
+        Args:
+            issue_updates: List of issue creation specifications. Each item should contain
+                          'fields' dict with issue fields, and optionally 'update' dict
+                          for additional operations during creation.
+
+        Returns:
+            Dict containing:
+            - issues: List of successfully created issues with their details
+            - errors: List of errors for failed issue creations
+
+        Raises:
+            ValueError: If required parameters are missing or bulk creation fails
+        """
+        if not issue_updates:
+            raise ValueError("issue_updates list cannot be empty")
+
+        if len(issue_updates) > 50:
+            raise ValueError("Cannot create more than 50 issues in a single bulk operation")
+
+        # Build the request payload for v3 API
+        payload = {"issueUpdates": issue_updates}
+
+        endpoint = "/issue/bulk"
+        logger.debug(f"Bulk creating issues with v3 API endpoint: {endpoint}")
+        logger.debug(f"Payload: {json.dumps(payload, indent=2)}")
+
+        response_data = await self._make_v3_api_request("POST", endpoint, data=payload)
+        logger.debug(f"Bulk create response: {json.dumps(response_data, indent=2)}")
+
+        return response_data
