@@ -1,11 +1,11 @@
+import asyncio
 import json
+import logging
 import os
+import sys
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Union
-import logging
-import asyncio
-import sys
 
 # --- Setup a dedicated file logger ---
 log_file_path = Path(__file__).parent / "jira_mcp_debug.log"
@@ -34,10 +34,12 @@ try:
     from jira import JIRA
 except ImportError:
     from .jira import JIRA
+
+from pydantic import BaseModel
+
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import EmbeddedResource, ImageContent, TextContent, Tool
-from pydantic import BaseModel
 
 from .jira_v3_api import JiraV3APIClient
 
@@ -518,7 +520,9 @@ class JiraServer:
                 issue_dict["description"] = description
 
             # Issue type - required, with validation for common issue types
-            logger.info(f"Processing issue_type: '{issue_type}' (type: {type(issue_type)})")
+            logger.info(
+                f"Processing issue_type: '{issue_type}' (type: {type(issue_type)})"
+            )
             common_types = [
                 "bug",
                 "task",
@@ -615,17 +619,25 @@ class JiraServer:
         except Exception as e:
             error_msg = f"Failed to create issue: {type(e).__name__}: {str(e)}"
             logger.error(error_msg, exc_info=True)
-            
+
             # Enhanced error handling for issue type errors
             if "issuetype" in str(e).lower() or "issue type" in str(e).lower():
-                logger.info("Issue type error detected, trying to provide helpful suggestions...")
+                logger.info(
+                    "Issue type error detected, trying to provide helpful suggestions..."
+                )
                 try:
-                    project_key = project if isinstance(project, str) else project.get("key")
+                    project_key = (
+                        project if isinstance(project, str) else project.get("key")
+                    )
                     if project_key:
-                        issue_types = await self.get_jira_project_issue_types(project_key)
+                        issue_types = await self.get_jira_project_issue_types(
+                            project_key
+                        )
                         type_names = [t.get("name") for t in issue_types]
-                        logger.info(f"Available issue types for project {project_key}: {', '.join(type_names)}")
-                        
+                        logger.info(
+                            f"Available issue types for project {project_key}: {', '.join(type_names)}"
+                        )
+
                         # Try to find the closest match
                         attempted_type = issue_type
                         closest = None
@@ -637,15 +649,17 @@ class JiraServer:
                             ):
                                 closest = t
                                 break
-                        
+
                         if closest:
-                            logger.info(f"The closest match to '{attempted_type}' is '{closest}'")
+                            logger.info(
+                                f"The closest match to '{attempted_type}' is '{closest}'"
+                            )
                             error_msg += f" Available types: {', '.join(type_names)}. Closest match: '{closest}'"
                         else:
                             error_msg += f" Available types: {', '.join(type_names)}"
                 except Exception as fetch_error:
                     logger.error(f"Could not fetch issue types: {str(fetch_error)}")
-            
+
             raise ValueError(error_msg)
 
     def create_jira_issues(
@@ -864,9 +878,9 @@ class JiraServer:
                             print(
                                 f"Fetching available issue types for project {project_key}..."
                             )
-                            available_types = asyncio.run(self.get_jira_project_issue_types(
-                                project_key
-                            ))
+                            available_types = asyncio.run(
+                                self.get_jira_project_issue_types(project_key)
+                            )
                             type_names = [t.get("name") for t in available_types]
                             print(f"Available issue types: {', '.join(type_names)}")
 
@@ -1042,7 +1056,9 @@ class JiraServer:
             print(error_msg)
             raise ValueError(error_msg)
 
-    async def get_jira_project_issue_types(self, project_key: str) -> List[Dict[str, Any]]:
+    async def get_jira_project_issue_types(
+        self, project_key: str
+    ) -> List[Dict[str, Any]]:
         """Get all available issue types for a specific project using v3 REST API
 
         Args:
@@ -1063,7 +1079,11 @@ class JiraServer:
             response_data = await v3_client.get_issue_types()
 
             # The new API returns the issue types directly as a list, not wrapped in an object
-            issue_types_data = response_data if isinstance(response_data, list) else response_data.get("issueTypes", [])
+            issue_types_data = (
+                response_data
+                if isinstance(response_data, list)
+                else response_data.get("issueTypes", [])
+            )
 
             # Convert to the expected format maintaining compatibility
             issue_types = []
@@ -1076,7 +1096,9 @@ class JiraServer:
                     }
                 )
 
-            logger.info(f"Found {len(issue_types)} issue types (project_key: {project_key})")
+            logger.info(
+                f"Found {len(issue_types)} issue types (project_key: {project_key})"
+            )
             return issue_types
 
         except Exception as e:
@@ -1553,7 +1575,7 @@ async def serve(
                     raise ValueError(f"Unknown tool: {name}")
 
             logger.debug("Serializing result to JSON...")
-            
+
             # Handle serialization properly for different result types
             if isinstance(result, list):
                 # If it's a list, check each item individually
@@ -1571,7 +1593,7 @@ async def serve(
                 else:
                     # It's already a dict or basic type
                     serialized_result = result
-                    
+
             json_result = json.dumps(serialized_result, indent=2)
             logger.warning("RETURNING HARDCODED DEBUG MESSAGE INSTEAD OF REAL DATA")
             return [TextContent(type="text", text=json_result)]

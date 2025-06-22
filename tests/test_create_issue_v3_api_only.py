@@ -1,7 +1,8 @@
 """Test cases for create_issue V3 API client only"""
 
 import asyncio
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
 
 from src.mcp_server_jira.jira_v3_api import JiraV3APIClient
@@ -19,7 +20,7 @@ class TestCreateIssueV3API:
         mock_response.json.return_value = {
             "id": "10000",
             "key": "PROJ-123",
-            "self": "https://test.atlassian.net/rest/api/3/issue/10000"
+            "self": "https://test.atlassian.net/rest/api/3/issue/10000",
         }
         mock_response.text = '{"id":"10000","key":"PROJ-123","self":"https://test.atlassian.net/rest/api/3/issue/10000"}'
         mock_response.raise_for_status.return_value = None
@@ -31,9 +32,9 @@ class TestCreateIssueV3API:
         client = JiraV3APIClient(
             server_url="https://test.atlassian.net",
             username="testuser",
-            token="testtoken"
+            token="testtoken",
         )
-        
+
         # Replace the client instance
         client.client = mock_client
 
@@ -41,7 +42,7 @@ class TestCreateIssueV3API:
             "project": {"key": "PROJ"},
             "summary": "Test issue",
             "description": "Test description",
-            "issuetype": {"name": "Bug"}
+            "issuetype": {"name": "Bug"},
         }
 
         result = await client.create_issue(fields=fields)
@@ -50,13 +51,13 @@ class TestCreateIssueV3API:
         assert result["id"] == "10000"
         assert result["key"] == "PROJ-123"
         assert result["self"] == "https://test.atlassian.net/rest/api/3/issue/10000"
-        
+
         # Verify the request was made with correct parameters
         mock_client.request.assert_called_once()
         call_args = mock_client.request.call_args
         assert call_args[1]["method"] == "POST"
         assert "/rest/api/3/issue" in call_args[1]["url"]
-        
+
         # Verify the payload
         payload = call_args[1]["json"]
         assert payload["fields"] == fields
@@ -70,7 +71,7 @@ class TestCreateIssueV3API:
         mock_response.json.return_value = {
             "id": "10001",
             "key": "PROJ-124",
-            "self": "https://test.atlassian.net/rest/api/3/issue/10001"
+            "self": "https://test.atlassian.net/rest/api/3/issue/10001",
         }
         mock_response.text = '{"id":"10001","key":"PROJ-124","self":"https://test.atlassian.net/rest/api/3/issue/10001"}'
         mock_response.raise_for_status.return_value = None
@@ -82,9 +83,9 @@ class TestCreateIssueV3API:
         client = JiraV3APIClient(
             server_url="https://test.atlassian.net",
             username="testuser",
-            token="testtoken"
+            token="testtoken",
         )
-        
+
         # Replace the client instance
         client.client = mock_client
 
@@ -92,31 +93,25 @@ class TestCreateIssueV3API:
             "project": {"key": "PROJ"},
             "summary": "Test issue with update",
             "description": "Test description",
-            "issuetype": {"name": "Task"}
+            "issuetype": {"name": "Task"},
         }
 
-        update = {
-            "labels": [{"add": "urgent"}]
-        }
+        update = {"labels": [{"add": "urgent"}]}
 
-        properties = [
-            {"key": "test-property", "value": "test-value"}
-        ]
+        properties = [{"key": "test-property", "value": "test-value"}]
 
         result = await client.create_issue(
-            fields=fields,
-            update=update,
-            properties=properties
+            fields=fields, update=update, properties=properties
         )
 
         # Verify the response
         assert result["id"] == "10001"
         assert result["key"] == "PROJ-124"
-        
+
         # Verify the request was made with correct parameters
         mock_client.request.assert_called_once()
         call_args = mock_client.request.call_args
-        
+
         # Verify the payload contains all optional parameters
         payload = call_args[1]["json"]
         assert payload["fields"] == fields
@@ -129,7 +124,7 @@ class TestCreateIssueV3API:
         client = JiraV3APIClient(
             server_url="https://test.atlassian.net",
             username="testuser",
-            token="testtoken"
+            token="testtoken",
         )
 
         with pytest.raises(ValueError, match="fields is required"):
@@ -141,7 +136,7 @@ class TestCreateIssueV3API:
         client = JiraV3APIClient(
             server_url="https://test.atlassian.net",
             username="testuser",
-            token="testtoken"
+            token="testtoken",
         )
 
         with pytest.raises(ValueError, match="fields is required"):

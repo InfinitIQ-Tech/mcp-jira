@@ -6,10 +6,10 @@ offering enhanced functionality and security for operations that require the lat
 """
 
 import json
-from typing import Any, Dict, Optional
-import httpx
-
 import logging
+from typing import Any, Dict, Optional
+
+import httpx
 
 logger = logging.getLogger("JiraMCPLogger")  # Get the same logger instance
 
@@ -374,10 +374,10 @@ class JiraV3APIClient:
         Get all issue types for user using the v3 REST API.
 
         Returns all issue types. This operation can be accessed anonymously.
-        
+
         Permissions required: Issue types are only returned as follows:
         - if the user has the Administer Jira global permission, all issue types are returned.
-        - if the user has the Browse projects project permission for one or more projects, 
+        - if the user has the Browse projects project permission for one or more projects,
           the issue types associated with the projects the user has permission to browse are returned.
         - if the user is anonymous then they will be able to access projects with the Browse projects for anonymous users
         - if the user authentication is incorrect they will fall back to anonymous
@@ -385,7 +385,7 @@ class JiraV3APIClient:
         Returns:
             List of issue type dictionaries with fields like:
             - avatarId: Avatar ID for the issue type
-            - description: Description of the issue type  
+            - description: Description of the issue type
             - hierarchyLevel: Hierarchy level
             - iconUrl: URL of the issue type icon
             - id: Issue type ID
@@ -414,7 +414,7 @@ class JiraV3APIClient:
         Create an issue using the v3 REST API.
 
         Creates an issue or, where the option to create subtasks is enabled in Jira, a subtask.
-        A transition may be applied, to move the issue or subtask to a workflow step other than 
+        A transition may be applied, to move the issue or subtask to a workflow step other than
         the default start step, and issue properties set.
 
         Args:
@@ -428,7 +428,7 @@ class JiraV3APIClient:
         Returns:
             Dictionary containing the created issue details:
             - id: Issue ID
-            - key: Issue key 
+            - key: Issue key
             - self: URL to the created issue
             - transition: Transition result if applied
 
