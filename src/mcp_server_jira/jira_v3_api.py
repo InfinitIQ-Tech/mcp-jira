@@ -219,3 +219,51 @@ class JiraV3APIClient:
         response_data = await self._make_v3_api_request("GET", endpoint, params=params)
         print(f"Projects API response: {json.dumps(response_data, indent=2)}")
         return response_data
+
+    async def get_transitions(
+        self,
+        issue_id_or_key: str,
+        expand: Optional[str] = None,
+        transition_id: Optional[str] = None,
+        skip_remote_only_condition: Optional[bool] = None,
+        include_unavailable_transitions: Optional[bool] = None,
+        sort_by_ops_bar_and_status: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """
+        Get available transitions for an issue using the v3 REST API.
+        
+        Returns either all transitions or a transition that can be performed by the user 
+        on an issue, based on the issue's status.
+        
+        Args:
+            issue_id_or_key: Issue ID or key (required)
+            expand: Expand additional transition fields in response
+            transition_id: Get only the transition matching this ID
+            skip_remote_only_condition: Skip remote-only conditions check
+            include_unavailable_transitions: Include transitions that can't be performed
+            sort_by_ops_bar_and_status: Sort transitions by operations bar and status
+            
+        Returns:
+            Dictionary containing the transitions response with transition details
+            
+        Raises:
+            ValueError: If the API request fails
+        """
+        if not issue_id_or_key:
+            raise ValueError("issue_id_or_key is required")
+
+        params = {
+            "expand": expand,
+            "transitionId": transition_id,
+            "skipRemoteOnlyCondition": skip_remote_only_condition,
+            "includeUnavailableTransitions": include_unavailable_transitions,
+            "sortByOpsBarAndStatus": sort_by_ops_bar_and_status,
+        }
+        
+        params = {k: v for k, v in params.items() if v is not None}
+        
+        endpoint = f"/issue/{issue_id_or_key}/transitions"
+        logger.debug(f"Fetching transitions with v3 API endpoint: {endpoint} with params: {params}")
+        response_data = await self._make_v3_api_request("GET", endpoint, params=params)
+        logger.debug(f"Transitions API response: {json.dumps(response_data, indent=2)}")
+        return response_data
