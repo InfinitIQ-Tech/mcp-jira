@@ -267,3 +267,90 @@ class JiraV3APIClient:
         response_data = await self._make_v3_api_request("GET", endpoint, params=params)
         logger.debug(f"Transitions API response: {json.dumps(response_data, indent=2)}")
         return response_data
+
+    async def transition_issue(
+        self,
+        issue_id_or_key: str,
+        transition_id: str,
+        fields: Optional[Dict[str, Any]] = None,
+        comment: Optional[str] = None,
+        history_metadata: Optional[Dict[str, Any]] = None,
+        properties: Optional[list] = None,
+    ) -> Dict[str, Any]:
+        """
+        Transition an issue using the v3 REST API.
+        
+        Performs an issue transition and, if the transition has a screen, 
+        updates the fields from the transition screen.
+        
+        Args:
+            issue_id_or_key: Issue ID or key (required)
+            transition_id: ID of the transition to perform (required)
+            fields: Dict containing field names and values to update during transition
+            comment: Simple string comment to add during transition
+            history_metadata: Optional history metadata for the transition
+            properties: Optional list of properties to set
+            
+        Returns:
+            Empty dictionary on success (204 No Content response)
+            
+        Raises:
+            ValueError: If required parameters are missing or transition fails
+        """
+        if not issue_id_or_key:
+            raise ValueError("issue_id_or_key is required")
+        
+        if not transition_id:
+            raise ValueError("transition_id is required")
+
+        # Build the request payload
+        payload = {
+            "transition": {
+                "id": transition_id
+            }
+        }
+
+        # Add fields if provided
+        if fields:
+            payload["fields"] = fields
+
+        # Add comment if provided - convert simple string to ADF format
+        if comment:
+            payload["update"] = {
+                "comment": [
+                    {
+                        "add": {
+                            "body": {
+                                "type": "doc",
+                                "version": 1,
+                                "content": [
+                                    {
+                                        "type": "paragraph",
+                                        "content": [
+                                            {
+                                                "type": "text",
+                                                "text": comment
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                ]
+            }
+
+        # Add optional metadata
+        if history_metadata:
+            payload["historyMetadata"] = history_metadata
+
+        if properties:
+            payload["properties"] = properties
+
+        endpoint = f"/issue/{issue_id_or_key}/transitions"
+        logger.debug(f"Transitioning issue with v3 API endpoint: {endpoint}")
+        logger.debug(f"Transition payload: {json.dumps(payload, indent=2)}")
+        
+        response_data = await self._make_v3_api_request("POST", endpoint, data=payload)
+        logger.debug(f"Transition response: {response_data}")
+        return response_data

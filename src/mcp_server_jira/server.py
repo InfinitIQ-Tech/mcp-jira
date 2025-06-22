@@ -1025,36 +1025,34 @@ class JiraServer:
             print(error_msg)
             raise ValueError(error_msg)
 
-    def transition_jira_issue(
+    async def transition_jira_issue(
         self,
         issue_key: str,
         transition_id: str,
         comment: Optional[str] = None,
         fields: Optional[Dict[str, Any]] = None,
     ) -> bool:
-        """Transition an issue to a new state"""
-        if not self.client:
-            if not self.connect():
-                # Connection failed - provide clear error message
-                raise ValueError(
-                    f"Failed to connect to Jira server at {self.server_url}. Check your authentication credentials."
-                )
-
+        """Transition an issue to a new state using v3 REST API"""
+        logger.info("Starting transition_jira_issue...")
+        
         try:
-            # Add fields if provided
-            kwargs = {}
-            if fields:
-                kwargs["fields"] = fields
-            if comment:
-                kwargs["comment"] = comment
-
-            self.client.transition_issue(issue_key, transition_id, **kwargs)
-            return True
-        except Exception as e:
-            print(f"Failed to transition {issue_key}: {type(e).__name__}: {str(e)}")
-            raise ValueError(
-                f"Failed to transition {issue_key}: {type(e).__name__}: {str(e)}"
+            # Use v3 API client
+            v3_client = self._get_v3_api_client()
+            await v3_client.transition_issue(
+                issue_id_or_key=issue_key,
+                transition_id=transition_id,
+                fields=fields,
+                comment=comment
             )
+            
+            logger.info(f"Successfully transitioned issue {issue_key} to transition {transition_id}")
+            return True
+            
+        except Exception as e:
+            error_msg = f"Failed to transition {issue_key}: {type(e).__name__}: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            print(error_msg)
+            raise ValueError(error_msg)
 
     def get_jira_project_issue_types(self, project_key: str) -> List[Dict[str, Any]]:
         """Get all available issue types for a specific project
@@ -1529,15 +1527,15 @@ async def serve(
                     logger.info("COMPLETED await jira_server.get_jira_transitions.")
 
                 case JiraTools.TRANSITION_ISSUE.value:
-                    logger.info("Calling synchronous tool transition_jira_issue...")
+                    logger.info("Calling async tool transition_jira_issue...")
                     issue_key = arguments.get("issue_key")
                     transition_id = arguments.get("transition_id")
                     if not issue_key or not transition_id:
                         raise ValueError("Missing required arguments: issue_key and transition_id")
                     comment = arguments.get("comment")
                     fields = arguments.get("fields")
-                    result = jira_server.transition_jira_issue(issue_key, transition_id, comment, fields)
-                    logger.info("Synchronous tool transition_jira_issue completed.")
+                    result = await jira_server.transition_jira_issue(issue_key, transition_id, comment, fields)
+                    logger.info("Async tool transition_jira_issue completed.")
 
                 case JiraTools.GET_PROJECT_ISSUE_TYPES.value:
                     logger.info("Calling synchronous tool get_jira_project_issue_types...")
