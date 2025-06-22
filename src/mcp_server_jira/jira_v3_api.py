@@ -368,3 +368,59 @@ class JiraV3APIClient:
         response_data = await self._make_v3_api_request("POST", endpoint, data=payload)
         logger.debug(f"Transition response: {response_data}")
         return response_data
+
+    async def get_issue_types(
+        self,
+        project_id_or_key: str,
+        start_at: int = 0,
+        max_results: int = 50,
+    ) -> Dict[str, Any]:
+        """
+        Get create metadata issue types for a project using the v3 REST API.
+
+        Returns a page of issue type metadata for a specified project. Use this 
+        information to populate the requests for creating issues.
+
+        Args:
+            project_id_or_key: Project ID or key (required)
+            start_at: The index of the first item to return (default: 0)
+            max_results: The maximum number of items to return (default: 50)
+
+        Returns:
+            Dictionary containing the paginated response with issue types and pagination info.
+            Structure: {
+                "issueTypes": [
+                    {
+                        "id": "1",
+                        "name": "Bug", 
+                        "description": "An error in the code",
+                        "iconUrl": "...",
+                        "self": "...",
+                        "subtask": false
+                    }
+                ],
+                "maxResults": 50,
+                "startAt": 0,
+                "total": 1
+            }
+
+        Raises:
+            ValueError: If required parameters are missing or the API request fails
+        """
+        if not project_id_or_key:
+            raise ValueError("project_id_or_key is required")
+
+        params = {
+            "startAt": start_at,
+            "maxResults": max_results,
+        }
+
+        params = {k: v for k, v in params.items() if v is not None}
+
+        endpoint = f"/issue/createmeta/{project_id_or_key}/issuetypes"
+        logger.debug(
+            f"Fetching issue types with v3 API endpoint: {endpoint} with params: {params}"
+        )
+        response_data = await self._make_v3_api_request("GET", endpoint, params=params)
+        logger.debug(f"Issue types API response: {json.dumps(response_data, indent=2)}")
+        return response_data
